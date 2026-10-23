@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'io.rfsj.weealert'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'io.rfsj.weealert'
+        minSdk 26          // v1 signing dropped, native lambdas, AudioTrack.Builder
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+    signingConfigs {
+        release {
+            if (System.getenv('KS_PATH')) {
+                storeFile file(System.getenv('KS_PATH'))
+                storePassword System.getenv('KS_PASS')
+                keyAlias System.getenv('KS_ALIAS')
+                keyPassword System.getenv('KS_PASS')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            vcsInfo.include = false // no git info in the APK, keeps builds reproducible
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            if (System.getenv('KS_PATH')) signingConfig signingConfigs.release
+        }
+    }
+    dependenciesInfo { includeInApk = false; includeInBundle = false } // no signing blob, reproducible
+    lint { checkReleaseBuilds = false; abortOnError = false }
+}
