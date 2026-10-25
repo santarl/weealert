@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- no permissions: the source is read through the file picker, sounds are written through the folder picker -->
+    <!-- no permissions: the source is read through the file picker, sounds are written through the folder picker or MediaStore -->
     <application
         android:label="weealert"
         android:icon="@mipmap/ic"
@@ -15,5 +15,16 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- shows the generated sounds in the system file picker; read only -->
+        <provider
+            android:name=".P"
+            android:authorities="${applicationId}.docs"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER"/>
+            </intent-filter>
+        </provider>
     </application>
 </manifest>

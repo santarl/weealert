@@ -3,6 +3,8 @@ package io.rfsj.weealert;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
+import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -13,8 +15,10 @@ import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.util.TypedValue;
@@ -32,26 +36,15 @@ import android.widget.TextView;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
-import java.util.Locale;
 
 public class M extends Activity {
-    private static final int RC_SRC = 1, RC_DIR = 2, MIN_N = 2, MAX_N = 40;
-
-    /** One generated set, swapped in as a whole so the UI thread never sees a half-built one. */
-    private static final class Set {
-        Synth.Note note;
-        Codebook.Pattern[] pats;
-        String[] names;
-        short[][] pcm;
-        Params prm;
-        String info;
-    }
+    private static final int RC_SRC = 1, RC_DIR = 2, MIN_N = Gen.MIN_N, MAX_N = Gen.MAX_N;
 
     private SharedPreferences sp;
     private Params prm = new Params();
     private float[] raw;           // decoded or built-in source, before trimming
     private int rawRate;
-    private volatile Set set;
+    private volatile Gen.Result set;
     private volatile int gen;
     private int count = 8;
     private Uri dirUri;
@@ -223,10 +216,11 @@ public class M extends Activity {
         dirLabel = tv("", 15, Color.WHITE, false);
         root.addView(dirLabel);
         root.addView(row(btn("Choose folder", v -> pickDir()), btn("Export all", v -> export())));
+        root.addView(btn("Add to system tones", v -> installTones()));
         status = tv("", 13, 0xff9ad0ff, false);
         status.setPadding(0, dp(8), 0, 0);
         root.addView(status);
-        root.addView(tv("Then set each file as a contact's tone in WhatsApp, Telegram, Signal, Contacts and so on. Picking the Notifications folder helps system tone pickers find them.", 12, 0xff888888, false));
+        root.addView(tv("Then set each sound as a contact's tone in WhatsApp, Telegram, Signal, Contacts and so on. \"Add to system tones\" (Android 10+) puts them in the list the system tone pickers show. weealert is also a source in the system file picker: look for it in the sidebar, no export needed.", 12, 0xff888888, false));
 
         setContentView(sv);
         countLabel.setText(String.valueOf(count));
@@ -399,7 +393,7 @@ public class M extends Activity {
     }
 
     private void previewSource() {
-        Set x = set;
+        Gen.Result x = set;
         if (x == null) return;
         short[] d = new short[x.note.data.length];
         for (int i = 0; i < d.length; i++) d[i] = (short) Math.round(x.note.data[i] * 32767f);
@@ -415,37 +409,15 @@ public class M extends Activity {
         final Params pr = prm.copy();
         if (r == null) return;
         new Thread(() -> {
-            Synth.Note note = Synth.prepare(r, rr, pr);
-            if (note.data.length < 64) { say("The source sound is empty."); return; }
-            int srcMs = (int) (1000L * note.data.length / note.rate);
-            Set x = new Set();
-            x.note = note;
-            x.prm = pr;
-            x.pats = Codebook.pick(pr, srcMs, n);
-            x.names = Names.forPatterns(x.pats);
-            x.pcm = new short[x.pats.length][];
-            int lo = Integer.MAX_VALUE, hi = 0;
-            for (int i = 0; i < x.pats.length; i++) {
-                x.pcm[i] = Synth.render(note, x.pats[i], pr);
-                lo = Math.min(lo, x.pcm[i].length);
-                hi = Math.max(hi, x.pcm[i].length);
-            }
-            StringBuilder s = new StringBuilder();
-            s.append(x.pats.length).append(" sounds");
-            if (x.pats.length < n) s.append(" (only that many fit these settings)");
-            if (x.pats.length > 0) {
-                s.append(String.format(Locale.US, ", %.2f-%.2f s", lo / (double) note.rate, hi / (double) note.rate));
-                if (x.pats.length > 1)
-                    s.append(", closest pair ").append(Codebook.minDistance(x.pats, pr.rhythmW)).append(" (higher is easier)");
-            }
-            x.info = s.toString();
+            Gen.Result x = Gen.build(r, rr, pr, n);
+            if (x == null) { say("The source sound is empty."); return; }
             if (g != gen) return;
             set = x;
             runOnUiThread(() -> { if (g == gen) showList(x); });
         }).start();
     }
 
-    private void showList(Set x) {
+    private void showList(Gen.Result x) {
         info.setText(x.info);
         list.removeAllViews();
         for (int i = 0; i < x.names.length; i++) {
@@ -471,7 +443,7 @@ public class M extends Activity {
     }
 
     private void play(int i) {
-        Set x = set;
+        Gen.Result x = set;
         if (x == null || i >= x.pcm.length) return;
         playPcm(x.pcm[i], x.note.rate);
     }
@@ -501,7 +473,7 @@ public class M extends Activity {
     // ---------------------------------------------------------------- export
 
     private void export() {
-        final Set x = set;
+        final Gen.Result x = set;
         final Uri tree = dirUri;
         if (x == null) { say("Nothing generated yet."); return; }
         if (tree == null) { say("Choose a folder first."); return; }
@@ -518,8 +490,7 @@ public class M extends Activity {
                     while (c != null && c.moveToNext()) have.put(c.getString(1), c.getString(0));
                 }
                 for (int i = 0; i < x.names.length; i++) {
-                    String file = (x.prm.numbered ? String.format(Locale.US, "%02d-", i + 1) : "")
-                            + x.prm.prefix + x.names[i] + ".wav";
+                    String file = Gen.fileName(x.prm, i, x.names[i]);
                     Uri u;
                     if (have.containsKey(file)) u = DocumentsContract.buildDocumentUriUsingTree(tree, have.get(file));
                     else u = DocumentsContract.createDocument(cr, parent, "audio/x-wav", file);
@@ -532,6 +503,54 @@ public class M extends Activity {
                 say("Exported " + x.names.length + " files.");
             } catch (Exception e) {
                 say("Export failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    // ---------------------------------------------------------------- system tones
+
+    private void installTones() {
+        final Gen.Result x = set;
+        if (x == null) { say("Nothing generated yet."); return; }
+        if (Build.VERSION.SDK_INT < 29) { say("Adding to system tones needs Android 10 or newer. Use Export or the file picker instead."); return; }
+        say("Adding to system tones...");
+        new Thread(() -> {
+            try {
+                ContentResolver cr = getContentResolver();
+                Uri coll = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+                for (int i = 0; i < x.names.length; i++) {
+                    String file = Gen.fileName(x.prm, i, x.names[i]);
+                    Uri u = null;
+                    try (Cursor c = cr.query(coll, new String[]{MediaStore.Audio.Media._ID},
+                            MediaStore.Audio.Media.DISPLAY_NAME + "=? AND " + MediaStore.Audio.Media.RELATIVE_PATH + "=?",
+                            new String[]{file, "Notifications/"}, null)) {
+                        if (c != null && c.moveToFirst()) u = ContentUris.withAppendedId(coll, c.getLong(0));
+                    }
+                    boolean fresh = u == null;
+                    if (fresh) {
+                        ContentValues v = new ContentValues();
+                        v.put(MediaStore.Audio.Media.DISPLAY_NAME, file);
+                        v.put(MediaStore.Audio.Media.TITLE, file.substring(0, file.length() - 4));
+                        v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/x-wav");
+                        v.put(MediaStore.Audio.Media.RELATIVE_PATH, "Notifications/");
+                        v.put(MediaStore.Audio.Media.IS_NOTIFICATION, 1);
+                        v.put(MediaStore.Audio.Media.IS_PENDING, 1);
+                        u = cr.insert(coll, v);
+                    }
+                    if (u == null) throw new IOException("could not add " + file);
+                    try (OutputStream o = cr.openOutputStream(u, "wt")) {
+                        if (o == null) throw new IOException("could not write " + file);
+                        o.write(Synth.wav(x.pcm[i], x.note.rate));
+                    }
+                    if (fresh) {
+                        ContentValues v = new ContentValues();
+                        v.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                        cr.update(u, v, null, null);
+                    }
+                }
+                say("Added " + x.names.length + " sounds to the system tones (Notifications).");
+            } catch (Exception e) {
+                say("Could not add them: " + e.getMessage());
             }
         }).start();
     }
