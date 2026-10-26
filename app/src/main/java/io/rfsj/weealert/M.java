@@ -3,8 +3,6 @@ package io.rfsj.weealert;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
-import android.content.ContentUris;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -18,7 +16,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
-import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.util.TypedValue;
@@ -516,38 +513,8 @@ public class M extends Activity {
         say("Adding to system tones...");
         new Thread(() -> {
             try {
-                ContentResolver cr = getContentResolver();
-                Uri coll = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-                for (int i = 0; i < x.names.length; i++) {
-                    String file = Gen.fileName(x.prm, i, x.names[i]);
-                    Uri u = null;
-                    try (Cursor c = cr.query(coll, new String[]{MediaStore.Audio.Media._ID},
-                            MediaStore.Audio.Media.DISPLAY_NAME + "=? AND " + MediaStore.Audio.Media.RELATIVE_PATH + "=?",
-                            new String[]{file, "Notifications/"}, null)) {
-                        if (c != null && c.moveToFirst()) u = ContentUris.withAppendedId(coll, c.getLong(0));
-                    }
-                    boolean fresh = u == null;
-                    if (fresh) {
-                        ContentValues v = new ContentValues();
-                        v.put(MediaStore.Audio.Media.DISPLAY_NAME, file);
-                        v.put(MediaStore.Audio.Media.TITLE, file.substring(0, file.length() - 4));
-                        v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/x-wav");
-                        v.put(MediaStore.Audio.Media.RELATIVE_PATH, "Notifications/");
-                        v.put(MediaStore.Audio.Media.IS_NOTIFICATION, 1);
-                        v.put(MediaStore.Audio.Media.IS_PENDING, 1);
-                        u = cr.insert(coll, v);
-                    }
-                    if (u == null) throw new IOException("could not add " + file);
-                    try (OutputStream o = cr.openOutputStream(u, "wt")) {
-                        if (o == null) throw new IOException("could not write " + file);
-                        o.write(Synth.wav(x.pcm[i], x.note.rate));
-                    }
-                    if (fresh) {
-                        ContentValues v = new ContentValues();
-                        v.put(MediaStore.Audio.Media.IS_PENDING, 0);
-                        cr.update(u, v, null, null);
-                    }
-                }
+                for (int i = 0; i < x.names.length; i++)
+                    Tones.add(this, Gen.fileName(x.prm, i, x.names[i]), x.pcm[i], x.note.rate);
                 say("Added " + x.names.length + " sounds to the system tones (Notifications).");
             } catch (Exception e) {
                 say("Could not add them: " + e.getMessage());

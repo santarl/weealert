@@ -15,6 +15,16 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- answers the system tone picker intent, so weealert is listed when an app asks for a notification tone -->
+        <activity
+            android:name=".Pick"
+            android:label="weealert"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.RINGTONE_PICKER"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
         <!-- shows the generated sounds in the system file picker; read only -->
         <provider
             android:name=".P"

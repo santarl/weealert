@@ -17,8 +17,9 @@ Keep it to roughly 5-12 contacts you really need to tell apart by ear. The list 
 
 ## Getting the sounds into other apps
 
-Three ways, use whichever the other app likes:
+Four ways, use whichever the other app likes:
 
+- **Tone picker:** weealert answers the system tone picker request, so when an app opens its notification tone chooser, weealert is listed in the "Choose an action" list next to the system picker (the same way Zedge shows up). Tap a sound to hear it, press Use, and it is added to the system tones and handed back to the app. Android 10+.
 - **File picker:** weealert registers itself as a storage root, so it shows up in the system file picker (look for "weealert" in the sidebar). The sounds are generated when you open them, nothing is stored. Works in any app that lets you choose an audio file.
 - **Add to system tones** (Android 10+): adds the sounds to the Notifications tone library, which is what the system tone pickers list. If you change settings and add again, sounds with the same name are overwritten.
 - **Export all:** writes WAV files into a folder you choose.
