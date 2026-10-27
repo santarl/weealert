@@ -20,6 +20,12 @@ final class Params {
     int levelDb = -1;        // peak level of the exported files
     boolean numbered = false; // 01-name.wav so the folder sorts by pick order
     String prefix = "";
+    // contact voices
+    int vSyll = 150;         // length of one syllable in ms at normal speed
+    int vPitch = 300;        // centre pitch of the voices, Hz
+    int vBreath = 4;         // breathiness, percent
+    int vMaxSyl = 4;         // longest name, in syllables
+    boolean vFirst = true;   // use only the first word of a name
 
     Params copy() { return parse(serialize()); }
 
@@ -70,6 +76,10 @@ final class Params {
         String p = b.length() > 16 ? b.substring(0, 16) : b.toString();
         if (!p.equals(prefix)) ch = true;
         prefix = p;
+        vSyll = clamp(vSyll, 100, 300);
+        vPitch = clamp(vPitch, 150, 500);
+        vBreath = clamp(vBreath, 0, 30);
+        vMaxSyl = clamp(vMaxSyl, 1, 6);
         return ch;
     }
 
@@ -94,7 +104,8 @@ final class Params {
         return "maxMs=" + maxMs + "\nnoteMs=" + noteMs + "\ngaps=" + list(gaps) + "\nminNotes=" + minNotes
                 + "\nmaxNotes=" + maxNotes + "\nsemis=" + list(semis) + "\nrhythmW=" + rhythmW + "\nseed=" + seed
                 + "\ncut=" + cut + "\nfadeMs=" + fadeMs + "\nfalloff=" + falloff + "\nreverse=" + reverse
-                + "\nrate=" + rate + "\nlevelDb=" + levelDb + "\nnumbered=" + numbered + "\nprefix=" + prefix;
+                + "\nrate=" + rate + "\nlevelDb=" + levelDb + "\nnumbered=" + numbered + "\nprefix=" + prefix
+                + "\nvSyll=" + vSyll + "\nvPitch=" + vPitch + "\nvBreath=" + vBreath + "\nvMaxSyl=" + vMaxSyl + "\nvFirst=" + vFirst;
     }
 
     static Params parse(String s) {
@@ -122,6 +133,11 @@ final class Params {
                         case "levelDb": p.levelDb = Integer.parseInt(v); break;
                         case "numbered": p.numbered = Boolean.parseBoolean(v); break;
                         case "prefix": p.prefix = v; break;
+                        case "vSyll": p.vSyll = Integer.parseInt(v); break;
+                        case "vPitch": p.vPitch = Integer.parseInt(v); break;
+                        case "vBreath": p.vBreath = Integer.parseInt(v); break;
+                        case "vMaxSyl": p.vMaxSyl = Integer.parseInt(v); break;
+                        case "vFirst": p.vFirst = Boolean.parseBoolean(v); break;
                         default: break;
                     }
                 } catch (NumberFormatException ignored) { }

@@ -1,12 +1,13 @@
 package io.rfsj.weealert;
 
-import java.util.Random;
-
 /** Built-in source sounds, and turning one short source note into the notes of a pattern. Pure Java. */
 final class Synth {
     static final int BUILTIN_RATE = 44100;
-    static final String[] BUILTIN = {"bell", "glass", "marimba", "kalimba", "pluck", "soft sine",
-            "beep", "water drop", "e-piano", "wood tock"};
+    /** Names by stable id. Ids 4 and 8 are retired (null): saved choices keep their meaning, retired ones fall back to the bell. */
+    static final String[] BUILTIN = {"bell", "glass", "marimba", "kalimba", null, "soft sine",
+            "beep", "water drop", null, "wood tock"};
+
+    static boolean hasBuiltin(int id) { return id >= 0 && id < BUILTIN.length && BUILTIN[id] != null; }
 
     // ---------------------------------------------------------------- built-in sources
     // All generated from maths, so they cost no APK size. Each is longer than needed; prepare() cuts it.
@@ -35,20 +36,6 @@ final class Synth {
             case 3: // kalimba: tine, partials near 1 : 5.4 : 12.8
                 return modal(880, new double[]{1, 5.4, 12.8}, new double[]{1, 0.3, 0.08},
                         new double[]{0.4, 0.09, 0.03}, 1.0);
-            case 4: { // Karplus-Strong plucked string
-                int d = (int) Math.round(R / 330.0), n = (int) (R * 1.2);
-                float[] buf = new float[d], o = new float[n];
-                Random r = new Random(1);
-                for (int i = 0; i < d; i++) buf[i] = r.nextFloat() * 2 - 1;
-                int p = 0;
-                for (int i = 0; i < n; i++) {
-                    float v = buf[p];
-                    o[i] = v;
-                    buf[p] = 0.5f * (v + buf[(p + 1) % d]) * 0.996f;
-                    p = (p + 1) % d;
-                }
-                return o;
-            }
             case 5: { // soft sine ping
                 int n = (int) (R * 0.6);
                 float[] o = new float[n];
@@ -77,16 +64,6 @@ final class Synth {
                     double t = i / (double) R;
                     double phase = 500 * t + 900 * (t - 0.035 * (1 - Math.exp(-t / 0.035)));
                     o[i] = (float) (Math.sin(2 * Math.PI * phase) * (1 - Math.exp(-t / 0.003)) * Math.exp(-t / 0.1));
-                }
-                return o;
-            }
-            case 8: { // electric piano: two-operator FM
-                int n = (int) (R * 1.2);
-                float[] o = new float[n];
-                for (int i = 0; i < n; i++) {
-                    double t = i / (double) R, w = 2 * Math.PI * 440 * t;
-                    double idxMod = 2.5 * Math.exp(-t / 0.2);
-                    o[i] = (float) (Math.sin(w + idxMod * Math.sin(w)) * Math.exp(-t / 0.45));
                 }
                 return o;
             }
@@ -129,7 +106,7 @@ final class Synth {
         return r;
     }
 
-    private static void normalize(float[] a, float target) {
+    static void normalize(float[] a, float target) {
         float p = 0;
         for (float v : a) p = Math.max(p, Math.abs(v));
         if (p > 0) for (int i = 0; i < a.length; i++) a[i] *= target / p;

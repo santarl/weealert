@@ -2,6 +2,7 @@ package io.rfsj.weealert;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -15,6 +16,7 @@ import android.media.AudioTrack;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.text.InputType;
@@ -32,10 +34,11 @@ import android.widget.TextView;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 public class M extends Activity {
-    private static final int RC_SRC = 1, RC_DIR = 2, MIN_N = Gen.MIN_N, MAX_N = Gen.MAX_N;
+    private static final int RC_SRC = 1, RC_DIR = 2, RC_CON = 3, MIN_N = Gen.MIN_N, MAX_N = Gen.MAX_N;
 
     private SharedPreferences sp;
     private Params prm = new Params();
@@ -44,6 +47,13 @@ public class M extends Activity {
     private volatile Gen.Result set;
     private volatile int gen;
     private int count = 8;
+    private String mode = "patterns";                     // "patterns" or "voices"
+    private ArrayList<Contacts.C> people = new ArrayList<>();
+    private LinearLayout patternsBox, voicesBox;
+    private Button modeBtn;
+    private TextView modeNote;
+    private EditText fVSyll, fVPitch, fVBreath, fVMax;
+    private CheckBox cFirst;
     private Uri dirUri;
     private AudioTrack track;
     private TextView srcLabel, countLabel, dirLabel, status, info;
@@ -57,10 +67,13 @@ public class M extends Activity {
         sp = getSharedPreferences("weealert", MODE_PRIVATE);
         count = Math.max(MIN_N, Math.min(MAX_N, sp.getInt("n", 8)));
         prm = Params.parse(sp.getString("params", ""));
+        mode = "voices".equals(sp.getString("mode", "patterns")) ? "voices" : "patterns";
+        people = Contacts.parse(sp.getString("contacts", ""));
         String d = sp.getString("dir", null);
         if (d != null) dirUri = Uri.parse(d);
         buildUi();
         fillFields(prm);
+        applyMode();
         String s = sp.getString("src", null);
         if (s != null) loadSource(Uri.parse(s)); else useBuiltin(sp.getInt("builtin", 0));
         refreshDirLabel();
@@ -148,18 +161,34 @@ public class M extends Activity {
         root.addView(tv("weealert", 26, Color.WHITE, true));
         root.addView(tv("a different sound for each contact, so you know who it is without looking", 13, 0xff999999, false));
 
-        section(root, "Source sound");
+        section(root, "Mode");
+        modeBtn = btn("", v -> toggleMode());
+        root.addView(modeBtn);
+        modeNote = tv("", 12, 0xff888888, false);
+        root.addView(modeNote);
+
+        patternsBox = new LinearLayout(this);
+        patternsBox.setOrientation(LinearLayout.VERTICAL);
+        root.addView(patternsBox);
+        section(patternsBox, "Source sound");
         srcLabel = tv("", 16, 0xff9ad0ff, false);
         srcLabel.setOnClickListener(v -> previewSource());
-        root.addView(srcLabel);
-        root.addView(tv("tap the name to hear the source note", 12, 0xff777777, false));
-        root.addView(row(btn("Choose file", v -> pickSource()), btn("Built-in sounds", v -> pickBuiltin())));
+        patternsBox.addView(srcLabel);
+        patternsBox.addView(tv("tap the name to hear the source note", 12, 0xff777777, false));
+        patternsBox.addView(row(btn("Choose file", v -> pickSource()), btn("Built-in sounds", v -> pickBuiltin())));
 
-        section(root, "How many sounds");
+        section(patternsBox, "How many sounds");
         countLabel = tv("", 20, Color.WHITE, true);
         countLabel.setGravity(Gravity.CENTER);
-        root.addView(row(btn("-", v -> setCount(count - 1)), countLabel, btn("+", v -> setCount(count + 1))));
-        root.addView(tv("Under about 12 stays easy to learn. Asking for more later keeps the earlier ones unchanged.", 12, 0xff888888, false));
+        patternsBox.addView(row(btn("-", v -> setCount(count - 1)), countLabel, btn("+", v -> setCount(count + 1))));
+        patternsBox.addView(tv("Under about 12 stays easy to learn. Asking for more later keeps the earlier ones unchanged.", 12, 0xff888888, false));
+
+        voicesBox = new LinearLayout(this);
+        voicesBox.setOrientation(LinearLayout.VERTICAL);
+        root.addView(voicesBox);
+        section(voicesBox, "Contacts");
+        voicesBox.addView(row(btn("Add from contacts", v -> pickContact()), btn("Add by name", v -> addByName())));
+        voicesBox.addView(tv("Tap a contact below to hear it, long-press for: say it as, new voice, remove. The contact picker hands the app only the contact you choose, and nothing leaves the phone. Each contact gets a voice as different as possible from the others.", 12, 0xff888888, false));
 
         section(root, "Sounds (tap to hear)");
         info = tv("", 12, 0xff9ad0ff, false);
@@ -202,6 +231,15 @@ public class M extends Activity {
         fLevel = field(adv, "Peak level (dBFS)", false);
         fRate = field(adv, "Sample rate (Hz, 0 = as source)", false);
         cRev = check(adv, "Play the source backwards");
+
+        adv.addView(tv("VOICES (contact voices mode)", 12, 0xff888888, true));
+        fVSyll = field(adv, "Syllable length (ms)", false);
+        note(adv, "100-300. Shorter is faster and more mumbly.");
+        fVPitch = field(adv, "Centre pitch (Hz)", false);
+        note(adv, "150-500. Contact voices spread around this.");
+        fVBreath = field(adv, "Breathiness (%)", false);
+        fVMax = field(adv, "Longest name (syllables)", false);
+        cFirst = check(adv, "Only the first word of a name");
 
         adv.addView(tv("FILES", 12, 0xff888888, true));
         fPrefix = field(adv, "File name prefix", true);
@@ -261,6 +299,11 @@ public class M extends Activity {
         cCut.setChecked(p.cut);
         cRev.setChecked(p.reverse);
         cNum.setChecked(p.numbered);
+        fVSyll.setText(String.valueOf(p.vSyll));
+        fVPitch.setText(String.valueOf(p.vPitch));
+        fVBreath.setText(String.valueOf(p.vBreath));
+        fVMax.setText(String.valueOf(p.vMaxSyl));
+        cFirst.setChecked(p.vFirst);
     }
 
     private static int num(EditText e, int dflt) {
@@ -285,6 +328,11 @@ public class M extends Activity {
         q.cut = cCut.isChecked();
         q.reverse = cRev.isChecked();
         q.numbered = cNum.isChecked();
+        q.vSyll = num(fVSyll, q.vSyll);
+        q.vPitch = num(fVPitch, q.vPitch);
+        q.vBreath = num(fVBreath, q.vBreath);
+        q.vMaxSyl = num(fVMax, q.vMaxSyl);
+        q.vFirst = cFirst.isChecked();
         return q;
     }
 
@@ -327,8 +375,12 @@ public class M extends Activity {
     }
 
     private void pickBuiltin() {
+        final ArrayList<Integer> ids = new ArrayList<>();
+        final ArrayList<String> names = new ArrayList<>();
+        for (int i = 0; i < Synth.BUILTIN.length; i++)
+            if (Synth.hasBuiltin(i)) { ids.add(i); names.add(Synth.BUILTIN[i]); }
         new AlertDialog.Builder(this).setTitle("Built-in sounds")
-                .setItems(Synth.BUILTIN, (d, which) -> useBuiltin(which)).show();
+                .setItems(names.toArray(new String[0]), (d, which) -> useBuiltin(ids.get(which))).show();
     }
 
     @Override
@@ -336,6 +388,11 @@ public class M extends Activity {
         super.onActivityResult(req, res, data);
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         Uri u = data.getData();
+        if (req == RC_CON) {
+            String nm = contactName(u);
+            if (nm != null) addPerson(nm);
+            return;
+        }
         try {
             getContentResolver().takePersistableUriPermission(u,
                     req == RC_DIR ? Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -352,7 +409,7 @@ public class M extends Activity {
     }
 
     private void useBuiltin(int idx) {
-        if (idx < 0 || idx >= Synth.BUILTIN.length) idx = 0;
+        if (!Synth.hasBuiltin(idx)) idx = 0;
         sp.edit().remove("src").putInt("builtin", idx).apply();
         raw = Synth.builtin(idx);
         rawRate = Synth.BUILTIN_RATE;
@@ -391,16 +448,27 @@ public class M extends Activity {
 
     private void previewSource() {
         Gen.Result x = set;
-        if (x == null) return;
+        if (x == null || x.note == null) return;
         short[] d = new short[x.note.data.length];
         for (int i = 0; i < d.length; i++) d[i] = (short) Math.round(x.note.data[i] * 32767f);
-        playPcm(d, x.note.rate);
+        playPcm(d, x.rate);
     }
 
     // ---------------------------------------------------------------- generate
 
     private void rebuild() {
         final int g = ++gen;
+        if ("voices".equals(mode)) {
+            final Params vp = prm.copy();
+            final ArrayList<Contacts.C> snap = Contacts.parse(Contacts.serialize(people));
+            new Thread(() -> {
+                Gen.Result x = Gen.buildVoices(snap, vp);
+                if (g != gen) return;
+                set = x;
+                runOnUiThread(() -> { if (g == gen) showList(x); });
+            }).start();
+            return;
+        }
         final float[] r = raw;
         final int rr = rawRate, n = count;
         final Params pr = prm.copy();
@@ -423,10 +491,96 @@ public class M extends Activity {
             r.setOrientation(LinearLayout.VERTICAL);
             r.setPadding(dp(4), dp(10), dp(4), dp(10));
             r.addView(tv(x.names[i], 18, Color.WHITE, false));
-            r.addView(tv(x.pats[i].describe(), 12, 0xff777777, false));
+            r.addView(tv(x.details[i], 12, 0xff777777, false));
             r.setOnClickListener(v -> play(idx));
+            if ("voices".equals(mode)) r.setOnLongClickListener(v -> { personMenu(idx); return true; });
             list.addView(r);
         }
+    }
+
+    // ---------------------------------------------------------------- modes and contacts
+
+    private void toggleMode() {
+        mode = "voices".equals(mode) ? "patterns" : "voices";
+        sp.edit().putString("mode", mode).apply();
+        applyMode();
+        rebuild();
+    }
+
+    private void applyMode() {
+        boolean v = "voices".equals(mode);
+        patternsBox.setVisibility(v ? View.GONE : View.VISIBLE);
+        voicesBox.setVisibility(v ? View.VISIBLE : View.GONE);
+        modeBtn.setText(v ? "Mode: contact voices (tap to switch)" : "Mode: tone patterns (tap to switch)");
+        modeNote.setText(v ? "Each contact's name is spoken as a fast mumble, in a voice of its own."
+                : "Short tone patterns built from a source sound. Switching modes loses nothing.");
+        if (!v) info.setText("");
+        list.removeAllViews();
+        set = null;
+    }
+
+    private void pickContact() {
+        try {
+            startActivityForResult(new Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI), RC_CON);
+        } catch (ActivityNotFoundException e) {
+            say("No contacts app found. Use Add by name.");
+        }
+    }
+
+    private String contactName(Uri u) {
+        try (Cursor c = getContentResolver().query(u, new String[]{ContactsContract.Contacts.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (RuntimeException e) {
+            say("Could not read that contact: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private void addByName() {
+        final EditText e = new EditText(this);
+        e.setSingleLine(true);
+        e.setHint("name");
+        new AlertDialog.Builder(this).setTitle("Add a name").setView(e)
+                .setPositiveButton("Add", (d, w) -> addPerson(e.getText().toString()))
+                .setNegativeButton("Cancel", null).show();
+    }
+
+    private void addPerson(String raw) {
+        String name = Contacts.clean(raw);
+        if (name.isEmpty()) return;
+        if (people.size() >= MAX_N) { say("That is the most contacts for now (" + MAX_N + ")."); return; }
+        Contacts.C c = new Contacts.C();
+        c.name = name;
+        people.add(c);
+        Contacts.assign(people, c, false);
+        savePeople();
+        say("Added " + name + ".");
+        rebuild();
+    }
+
+    private void savePeople() { sp.edit().putString("contacts", Contacts.serialize(people)).apply(); }
+
+    private void personMenu(final int i) {
+        if (i < 0 || i >= people.size()) return;
+        final Contacts.C c = people.get(i);
+        new AlertDialog.Builder(this).setTitle(c.name)
+                .setItems(new String[]{"Say it as...", "New voice", "Remove"}, (d, which) -> {
+                    if (which == 0) sayAs(c);
+                    else if (which == 1) { Contacts.assign(people, c, true); savePeople(); rebuild(); }
+                    else { people.remove(c); savePeople(); rebuild(); }
+                }).show();
+    }
+
+    private void sayAs(final Contacts.C c) {
+        final EditText e = new EditText(this);
+        e.setSingleLine(true);
+        e.setHint("spell it the way it sounds");
+        e.setText(c.say);
+        new AlertDialog.Builder(this).setTitle("Say " + c.name + " as")
+                .setMessage("Empty means use the name itself. Spelling it as it sounds fixes odd pronunciations, e.g. jorj for George.")
+                .setView(e)
+                .setPositiveButton("OK", (d, w) -> { c.say = Contacts.clean(e.getText().toString()); savePeople(); rebuild(); })
+                .setNegativeButton("Cancel", null).show();
     }
 
     // ---------------------------------------------------------------- playback
@@ -442,7 +596,7 @@ public class M extends Activity {
     private void play(int i) {
         Gen.Result x = set;
         if (x == null || i >= x.pcm.length) return;
-        playPcm(x.pcm[i], x.note.rate);
+        playPcm(x.pcm[i], x.rate);
     }
 
     private void playPcm(short[] d, int rate) {
@@ -494,7 +648,7 @@ public class M extends Activity {
                     if (u == null) throw new IOException("could not create " + file);
                     try (OutputStream o = cr.openOutputStream(u, "wt")) {
                         if (o == null) throw new IOException("could not write " + file);
-                        o.write(Synth.wav(x.pcm[i], x.note.rate));
+                        o.write(Synth.wav(x.pcm[i], x.rate));
                     }
                 }
                 say("Exported " + x.names.length + " files.");
@@ -514,7 +668,7 @@ public class M extends Activity {
         new Thread(() -> {
             try {
                 for (int i = 0; i < x.names.length; i++)
-                    Tones.add(this, Gen.fileName(x.prm, i, x.names[i]), x.pcm[i], x.note.rate);
+                    Tones.add(this, Gen.fileName(x.prm, i, x.names[i]), x.pcm[i], x.rate);
                 say("Added " + x.names.length + " sounds to the system tones (Notifications).");
             } catch (Exception e) {
                 say("Could not add them: " + e.getMessage());

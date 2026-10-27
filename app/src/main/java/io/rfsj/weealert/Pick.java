@@ -97,7 +97,7 @@ public class Pick extends Activity {
             row.setOrientation(LinearLayout.VERTICAL);
             row.setPadding(dp(8), dp(10), dp(8), dp(10));
             row.addView(tv(r.names[i], 18, Color.WHITE, false));
-            row.addView(tv(r.pats[i].describe(), 12, 0xff777777, false));
+            row.addView(tv(r.details[i], 12, 0xff777777, false));
             row.setOnClickListener(v -> select(idx));
             rows[i] = row;
             list.addView(row);
@@ -109,7 +109,7 @@ public class Pick extends Activity {
         sel = i;
         rows[i].setBackgroundColor(0xff1d2b36);
         use.setEnabled(true);
-        play(res.pcm[i], res.note.rate);
+        play(res.pcm[i], res.rate);
     }
 
     private void choose() {
@@ -119,7 +119,7 @@ public class Pick extends Activity {
         status.setText("Adding to system tones...");
         new Thread(() -> {
             try {
-                Uri u = Tones.add(this, Gen.fileName(res.prm, i, res.names[i]), res.pcm[i], res.note.rate);
+                Uri u = Tones.add(this, Gen.fileName(res.prm, i, res.names[i]), res.pcm[i], res.rate);
                 runOnUiThread(() -> {
                     Intent r = new Intent();
                     r.putExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, u);

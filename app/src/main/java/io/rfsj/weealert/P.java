@@ -111,7 +111,7 @@ public class P extends DocumentsProvider {
                 if (!f.exists()) {
                     File tmp = new File(dir, prefix + documentId + ".tmp");
                     try (FileOutputStream o = new FileOutputStream(tmp)) {
-                        o.write(Synth.wav(r.pcm[i], r.note.rate));
+                        o.write(Synth.wav(r.pcm[i], r.rate));
                     }
                     if (!tmp.renameTo(f)) throw new IOException("could not write the sound");
                 }
