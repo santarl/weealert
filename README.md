@@ -41,7 +41,7 @@ Each name is spoken as a fast mumble in the style of Animal Crossing. A small fo
 
 ### Contact blips
 
-No speech model at all: each syllable of the name becomes one short blip made from one of the built-in source sounds, so it reads as a synthesised sound. The vowel sets the pitch (bright vowels like "ee" high, dark ones like "oo" low), the first consonant sets how the blip starts (a click for p t k, a hiss for s sh f, a soft start for m n, a glide for l r w y) and the syllable structure sets the rhythm. A contact's voice character is its source sound, pitch, speed and pitch contour.
+No speech model at all: each syllable of the name becomes one short blip of the source sound chosen above (a file or a built-in, the same one the tone-pattern and name-pattern modes use), so it reads as a synthesised sound. The vowel sets the pitch (bright vowels like "ee" high, dark ones like "oo" low), the first consonant sets how the blip starts (a click for p t k, a hiss for s sh f, a soft start for m n, a glide for l r w y) and the syllable structure sets the rhythm. A contact's voice character is its pitch, speed, blip length and pitch contour, spread as far apart as possible.
 
 ### Contact name patterns
 

@@ -119,14 +119,17 @@ final class Gen {
         return x;
     }
 
-    /** Contact blips: one electronic blip per syllable, no speech model. */
-    static Result buildBlips(List<Contacts.C> list, Params pr) {
-        int rate = pr.rate > 0 ? pr.rate : Blip.RATE;
+    /** Contact blips: one electronic blip per syllable from the chosen source, no speech model. Null if the source is empty. */
+    static Result buildBlips(List<Contacts.C> list, float[] raw, int rawRate, Params pr) {
+        float peak = 0;
+        for (float v : raw) peak = Math.max(peak, Math.abs(v));
+        if (peak <= 0) return null;
+        int rate = pr.rate > 0 ? pr.rate : rawRate;
         Result x = contactResult(list, pr, rate);
         for (int i = 0; i < list.size(); i++) {
             Contacts.C c = list.get(i);
-            float[] w = Blip.render(Say.syllables(c.text(), pr.vFirst, pr.vMaxSyl), c, pr, Contacts.seed(c.text()));
-            x.pcm[i] = finish(w, Blip.RATE, pr, rate);
+            float[] w = Blip.render(Say.syllables(c.text(), pr.vFirst, pr.vMaxSyl), c, pr, Contacts.seed(c.text()), raw, rawRate);
+            x.pcm[i] = finish(w, rawRate, pr, rate);
             x.details[i] = c.describeBlip();
         }
         contactInfo(x, list.size(), Contacts.minDistanceB(list));
@@ -176,10 +179,10 @@ final class Gen {
         if (key.equals(lastKey) && last != null) return last;
 
         Result x;
-        if ("voices".equals(mode) || "blips".equals(mode)) {
+        if ("voices".equals(mode)) {
             ArrayList<Contacts.C> list = Contacts.parse(contactsRaw);
             Contacts.ensure(list, pr);
-            x = "voices".equals(mode) ? buildVoices(list, pr) : buildBlips(list, pr);
+            x = buildVoices(list, pr);
         } else {
             float[] raw = null;
             int rate = Synth.BUILTIN_RATE;
@@ -195,10 +198,10 @@ final class Gen {
                 raw = Synth.builtin(builtin);
                 rate = Synth.BUILTIN_RATE;
             }
-            if ("cpat".equals(mode)) {
+            if ("cpat".equals(mode) || "blips".equals(mode)) {
                 ArrayList<Contacts.C> list = Contacts.parse(contactsRaw);
                 Contacts.ensure(list, pr);
-                x = buildCpat(list, raw, rate, pr);
+                x = "cpat".equals(mode) ? buildCpat(list, raw, rate, pr) : buildBlips(list, raw, rate, pr);
             } else {
                 x = build(raw, rate, pr, n);
             }

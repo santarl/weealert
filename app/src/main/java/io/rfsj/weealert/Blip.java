@@ -5,13 +5,11 @@ import java.util.Arrays;
 
 /**
  * Turns a name into electronic blips instead of speech: one short blip per syllable, made from one of the
- * built-in source sounds. The vowel sets the pitch (bright vowels high, dark ones low), the first consonant
+ * source sound chosen for the app. The vowel sets the pitch (bright vowels high, dark ones low), the first consonant
  * sets how the blip starts (click, hiss, soft or gliding) and the syllable structure sets the rhythm.
  * There is no voice model at all, so it reads as a synthesised sound, not as speech. Pure Java.
  */
 final class Blip {
-    static final int RATE = Synth.BUILTIN_RATE;
-
     /** Vowel brightness in semitones: front vowels (ee, eh) high, back vowels (oh, oo) low. */
     static int vowelSemi(char v) {
         switch (v) {
@@ -28,12 +26,13 @@ final class Blip {
 
     private static int xs(int s) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return s; }
 
-    static float[] render(ArrayList<Say.Syl> syls, Contacts.C c, Params p, int seed) {
+    /** The blips of one name, made from the chosen source sound (raw at the given sample rate). */
+    static float[] render(ArrayList<Say.Syl> syls, Contacts.C c, Params p, int seed, float[] raw, int rate) {
         if (syls.isEmpty()) return new float[0];
         Params pb = p.copy();
-        pb.noteMs = p.bNote;
+        pb.noteMs = Math.max(30, p.bNote * c.blen / 100);
         pb.rate = 0;
-        Synth.Note note = Synth.prepare(Synth.builtin(Synth.hasBuiltin(c.bsrc) ? c.bsrc : 0), RATE, pb);
+        Synth.Note note = Synth.prepare(raw, rate, pb);
         float[] src = note.data;
         if (src.length < 64) return new float[0];
         int n = syls.size();
@@ -56,8 +55,8 @@ final class Blip {
             Say.Syl s = syls.get(j);
             char on = s.on.length() > 0 ? s.on.charAt(0) : 0;
             rs = xs(rs);
-            notes[j] = blip(src, c.bpit + vowelSemi(s.nuc) + off[j], on, rs, j == 0 ? 1f : 0.82f);
-            at[j] = (int) (cur * RATE / 1000);
+            notes[j] = blip(src, rate, c.bpit + vowelSemi(s.nuc) + off[j], on, rs, j == 0 ? 1f : 0.82f);
+            at[j] = (int) (cur * rate / 1000);
             total = Math.max(total, at[j] + notes[j].length);
             cur += S * (1 + (s.co.length() > 0 ? 0.25 : 0) + (s.on.length() > 1 ? 0.15 : 0));
         }
@@ -65,19 +64,19 @@ final class Blip {
         for (int j = 0; j < n; j++)
             for (int i = 0; i < notes[j].length; i++) mix[at[j] + i] += notes[j][i];
         Synth.normalize(mix, 0.9f);
-        int fo = Math.min(total / 4, RATE / 100);
+        int fo = Math.min(total / 4, rate / 100);
         for (int i = 0; i < fo; i++) mix[total - 1 - i] *= i / (float) fo;
         return mix;
     }
 
     /** One blip: the source note at a pitch, started in the way the first consonant asks for. */
-    private static float[] blip(float[] src, double semi, char on, int rnd, float gain) {
+    private static float[] blip(float[] src, int rate, double semi, char on, int rnd, float gain) {
         double r0 = Math.pow(2, semi / 12.0);
         double glide = in("lrw", on) ? -2 : on == 'y' ? 2 : 0;
         double rmin = r0 * Math.pow(2, Math.min(0, glide) / 12.0);
         int cap = (int) (src.length / rmin) + 8;
         float[] o = new float[cap];
-        int glideN = RATE * 30 / 1000, len = 0;
+        int glideN = rate * 30 / 1000, len = 0;
         double pos = 0;
         for (int i = 0; i < cap; i++) {
             double r = r0;
@@ -93,12 +92,12 @@ final class Blip {
         int nz = rnd | 1;
         double prev = 0;
         if (in("mnN", on)) {                                   // nasals start softly
-            int fi = Math.min(len / 2, RATE * 18 / 1000);
+            int fi = Math.min(len / 2, rate * 18 / 1000);
             for (int i = 0; i < fi; i++) o[i] *= i / (float) fi;
             for (int i = 0; i < len; i++) o[i] *= 0.9f;
         }
         if (in("pbtdkgCJ", on)) {                              // plosives start with a click
-            int cl = Math.min(len, RATE * 3 / 1000);
+            int cl = Math.min(len, rate * 3 / 1000);
             float amp = in("ptkC", on) ? 0.5f : 0.3f;
             for (int i = 0; i < cl; i++) {
                 nz = xs(nz);
@@ -109,7 +108,7 @@ final class Blip {
         }
         if (in("fvszSZTh", on)) {                              // fricatives start with a hiss
             boolean bright = in("szSZ", on);
-            int hl = Math.min(len, RATE * 28 / 1000);
+            int hl = Math.min(len, rate * 28 / 1000);
             float amp = bright ? 0.35f : 0.22f;
             for (int i = 0; i < hl; i++) {
                 nz = xs(nz);

@@ -14,7 +14,8 @@ final class Contacts {
     static final class C {
         String name = "", say = "";
         int pitch = 0, fsc = 100, spd = 100, con = 0, roll = 0;     // contact voices
-        int bsrc = -2, bpit = 0, bspd = 100, bcon = 0, broll = 0;   // blips; bsrc -2 = not assigned yet
+        int bsrc = -2, bpit = 0, bspd = 100, bcon = 0, broll = 0;   // blips; bsrc -1 = assigned (older builds stored a source id here), anything else = assign again
+        int blen = 100;                                             // blip length in percent
         String pat = "";                                            // name patterns "gaps|semis"; "" = not assigned yet
         int proll = 0;
 
@@ -29,8 +30,7 @@ final class Contacts {
         }
 
         String describeBlip() {
-            String src = Synth.hasBuiltin(bsrc) ? Synth.BUILTIN[bsrc] : "bell";
-            return "blips: " + src + ", pitch " + sign(bpit) + ", speed " + bspd + "%, " + CONTOUR[bcon & 3] + tail();
+            return "blips: pitch " + sign(bpit) + ", speed " + bspd + "%, length " + blen + "%, " + CONTOUR[bcon & 3] + tail();
         }
 
         Codebook.Pattern pattern() {
@@ -46,6 +46,7 @@ final class Contacts {
 
     static final String[] CONTOUR = {"wandering", "rising", "falling", "bouncy"};
     static final int[] PITCH = {-6, -3, 0, 3, 6}, FSC = {85, 100, 115, 130}, SPD = {85, 100, 120};
+    static final int[] BPITCH = {-8, -4, 0, 4, 8}, BSPD = {80, 100, 125}, BLEN = {70, 100, 150};
     static final int CONTOURS = 4;
 
     private static String ints(int[] a) {
@@ -72,10 +73,10 @@ final class Contacts {
                 + 20 * Math.abs(log2(a.spd / (double) b.spd)) + (a.con != b.con ? 4 : 0);
     }
 
-    /** Blips: a different source sound counts a lot, then pitch, speed and contour. */
+    /** Blips (one shared source sound): pitch, speed, blip length and contour. */
     static double distB(C a, C b) {
         return Math.abs(a.bpit - b.bpit) + 20 * Math.abs(log2(a.bspd / (double) b.bspd))
-                + (a.bcon != b.bcon ? 4 : 0) + (a.bsrc != b.bsrc ? 8 : 0);
+                + 6 * Math.abs(log2(a.blen / (double) b.blen)) + (a.bcon != b.bcon ? 4 : 0);
     }
 
     static double minDistance(List<C> l) {
@@ -131,31 +132,28 @@ final class Contacts {
         c.pitch = v.pitch; c.fsc = v.fsc; c.spd = v.spd; c.con = v.con;
     }
 
-    /** Blips: the same idea over source sound, pitch, speed and contour. */
+    /** Blips: the same idea over pitch, speed, blip length and contour. */
     static void assignBlips(List<C> all, C c, boolean reroll) {
         ArrayList<C> others = new ArrayList<>();
-        for (C o : all) if (o != c && o.bsrc != -2) others.add(o);
-        if (others.isEmpty() && !reroll) { c.bsrc = 0; c.bpit = 0; c.bspd = 100; c.bcon = 0; return; }
+        for (C o : all) if (o != c && o.bsrc == -1) others.add(o);
+        if (others.isEmpty() && !reroll) { c.bsrc = -1; c.bpit = 0; c.bspd = 100; c.blen = 100; c.bcon = 0; return; }
         ArrayList<C> cand = new ArrayList<>();
         ArrayList<Double> score = new ArrayList<>();
-        for (int id = 0; id < Synth.BUILTIN.length; id++) {
-            if (!Synth.hasBuiltin(id)) continue;
-            for (int p : PITCH) for (int s : SPD) for (int k = 0; k < CONTOURS; k++) {
-                C v = new C();
-                v.bsrc = id; v.bpit = p; v.bspd = s; v.bcon = k;
-                if (reroll && c.bsrc != -2 && distB(v, c) < 6) continue;
-                double m = Double.MAX_VALUE;
-                for (C o : others) m = Math.min(m, distB(v, o));
-                cand.add(v);
-                score.add(others.isEmpty() ? 0 : m);
-            }
+        for (int p : BPITCH) for (int s : BSPD) for (int l : BLEN) for (int k = 0; k < CONTOURS; k++) {
+            C v = new C();
+            v.bpit = p; v.bspd = s; v.blen = l; v.bcon = k;
+            if (reroll && c.bsrc == -1 && distB(v, c) < 6) continue;
+            double m = Double.MAX_VALUE;
+            for (C o : others) m = Math.min(m, distB(v, o));
+            cand.add(v);
+            score.add(others.isEmpty() ? 0 : m);
         }
         ArrayList<Integer> order = new ArrayList<>();
         for (int i = 0; i < cand.size(); i++) order.add(i);
         rank(order, score, hash(c.name) + c.broll);
         C v = cand.get(order.get(reroll ? c.broll % Math.min(order.size(), 12) : 0));
         if (reroll) c.broll++;
-        c.bsrc = v.bsrc; c.bpit = v.bpit; c.bspd = v.bspd; c.bcon = v.bcon;
+        c.bsrc = -1; c.bpit = v.bpit; c.bspd = v.bspd; c.blen = v.blen; c.bcon = v.bcon;
     }
 
     private static int nearest(int[] set, int v) {
@@ -233,7 +231,7 @@ final class Contacts {
     static boolean ensure(List<C> all, Params prm) {
         boolean changed = false;
         for (C c : all) {
-            if (c.bsrc == -2) { assignBlips(all, c, false); changed = true; }
+            if (c.bsrc != -1) { assignBlips(all, c, false); changed = true; }
             if (c.pattern() == null) { assignPattern(all, c, prm, false); changed = true; }
         }
         return changed;
@@ -260,7 +258,7 @@ final class Contacts {
                     .append(c.fsc).append('\t').append(c.spd).append('\t').append(c.con).append('\t').append(c.roll)
                     .append('\t').append(c.bsrc).append('\t').append(c.bpit).append('\t').append(c.bspd)
                     .append('\t').append(c.bcon).append('\t').append(c.broll).append('\t').append(c.pat)
-                    .append('\t').append(c.proll).append('\n');
+                    .append('\t').append(c.proll).append('\t').append(c.blen).append('\n');
         return b.toString();
     }
 
@@ -288,6 +286,7 @@ final class Contacts {
                     c.pat = f[12];
                     c.proll = Integer.parseInt(f[13]);
                 }
+                if (f.length >= 15) c.blen = Math.max(30, Math.min(300, Integer.parseInt(f[14])));
                 out.add(c);
             } catch (NumberFormatException ignored) { }
         }

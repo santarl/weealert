@@ -193,7 +193,7 @@ public class M extends Activity {
         root.addView(voicesBox);
         section(voicesBox, "Contacts");
         voicesBox.addView(row(btn("Add from contacts", v -> pickContact()), btn("Add by name", v -> addByName())));
-        voicesBox.addView(tv("Tap a contact below to hear it, long-press for: say it as, new sound, remove. The contact picker hands the app only the contact you choose, and nothing leaves the phone. Each contact gets a sound as different as possible from the others. Contacts are shared by the three contact modes.", 12, 0xff888888, false));
+        voicesBox.addView(tv("Tap a contact below to hear it, long-press for: say it as, new sound, remove. The contact picker hands the app only the contact you choose, and nothing leaves the phone. Each contact gets a sound as different as possible from the others. Contacts are shared by the three contact modes; blips and name patterns use the source sound chosen above.", 12, 0xff888888, false));
 
         section(root, "Sounds (tap to hear)");
         info = tv("", 12, 0xff9ad0ff, false);
@@ -477,10 +477,10 @@ public class M extends Activity {
             final float[] raw0 = raw;
             final int rate0 = rawRate;
             final ArrayList<Contacts.C> snap = Contacts.parse(Contacts.serialize(people));
-            if ("cpat".equals(md) && raw0 == null) return;
+            if (("cpat".equals(md) || "blips".equals(md)) && raw0 == null) return;
             new Thread(() -> {
                 Gen.Result x = "voices".equals(md) ? Gen.buildVoices(snap, vp)
-                        : "blips".equals(md) ? Gen.buildBlips(snap, vp) : Gen.buildCpat(snap, raw0, rate0, vp);
+                        : "blips".equals(md) ? Gen.buildBlips(snap, raw0, rate0, vp) : Gen.buildCpat(snap, raw0, rate0, vp);
                 if (x == null) { say("The source sound is empty."); return; }
                 if (g != gen) return;
                 set = x;
@@ -524,7 +524,7 @@ public class M extends Activity {
     private static final String[] MODE_NOTES = {
             "Short tone patterns built from a source sound, not tied to any contact.",
             "Each contact's name is spoken as a fast mumble, in a voice of its own.",
-            "Each contact's name becomes a few electronic blips, one per syllable. Synthesised, not spoken.",
+            "Each contact's name becomes a few blips of the source sound, one per syllable. Synthesised, not spoken.",
             "The tone patterns of the first mode, but each contact's pattern follows the shape of its name."};
 
     private int modeIndex() {
@@ -545,7 +545,7 @@ public class M extends Activity {
 
     private void applyMode() {
         boolean c = Gen.isContacts(mode);
-        srcBox.setVisibility("patterns".equals(mode) || "cpat".equals(mode) ? View.VISIBLE : View.GONE);
+        srcBox.setVisibility("voices".equals(mode) ? View.GONE : View.VISIBLE);
         countBox.setVisibility("patterns".equals(mode) ? View.VISIBLE : View.GONE);
         voicesBox.setVisibility(c ? View.VISIBLE : View.GONE);
         modeBtn.setText("Mode: " + MODE_TITLES[modeIndex()] + " (tap to change)");
