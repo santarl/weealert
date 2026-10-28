@@ -47,12 +47,12 @@ public class M extends Activity {
     private volatile Gen.Result set;
     private volatile int gen;
     private int count = 8;
-    private String mode = "patterns";                     // "patterns" or "voices"
+    private String mode = "patterns";                     // "patterns", "voices", "blips" or "cpat"
     private ArrayList<Contacts.C> people = new ArrayList<>();
-    private LinearLayout patternsBox, voicesBox;
+    private LinearLayout srcBox, countBox, voicesBox;
     private Button modeBtn;
     private TextView modeNote;
-    private EditText fVSyll, fVPitch, fVBreath, fVMax;
+    private EditText fVSyll, fVPitch, fVBreath, fVMax, fBNote, fCSep;
     private CheckBox cFirst;
     private Uri dirUri;
     private AudioTrack track;
@@ -67,8 +67,10 @@ public class M extends Activity {
         sp = getSharedPreferences("weealert", MODE_PRIVATE);
         count = Math.max(MIN_N, Math.min(MAX_N, sp.getInt("n", 8)));
         prm = Params.parse(sp.getString("params", ""));
-        mode = "voices".equals(sp.getString("mode", "patterns")) ? "voices" : "patterns";
+        mode = sp.getString("mode", "patterns");
+        if (!"voices".equals(mode) && !"blips".equals(mode) && !"cpat".equals(mode)) mode = "patterns";
         people = Contacts.parse(sp.getString("contacts", ""));
+        if (Contacts.ensure(people, prm)) sp.edit().putString("contacts", Contacts.serialize(people)).apply();
         String d = sp.getString("dir", null);
         if (d != null) dirUri = Uri.parse(d);
         buildUi();
@@ -162,33 +164,36 @@ public class M extends Activity {
         root.addView(tv("a different sound for each contact, so you know who it is without looking", 13, 0xff999999, false));
 
         section(root, "Mode");
-        modeBtn = btn("", v -> toggleMode());
+        modeBtn = btn("", v -> chooseMode());
         root.addView(modeBtn);
         modeNote = tv("", 12, 0xff888888, false);
         root.addView(modeNote);
 
-        patternsBox = new LinearLayout(this);
-        patternsBox.setOrientation(LinearLayout.VERTICAL);
-        root.addView(patternsBox);
-        section(patternsBox, "Source sound");
+        srcBox = new LinearLayout(this);
+        srcBox.setOrientation(LinearLayout.VERTICAL);
+        root.addView(srcBox);
+        section(srcBox, "Source sound");
         srcLabel = tv("", 16, 0xff9ad0ff, false);
         srcLabel.setOnClickListener(v -> previewSource());
-        patternsBox.addView(srcLabel);
-        patternsBox.addView(tv("tap the name to hear the source note", 12, 0xff777777, false));
-        patternsBox.addView(row(btn("Choose file", v -> pickSource()), btn("Built-in sounds", v -> pickBuiltin())));
+        srcBox.addView(srcLabel);
+        srcBox.addView(tv("tap the name to hear the source note", 12, 0xff777777, false));
+        srcBox.addView(row(btn("Choose file", v -> pickSource()), btn("Built-in sounds", v -> pickBuiltin())));
 
-        section(patternsBox, "How many sounds");
+        countBox = new LinearLayout(this);
+        countBox.setOrientation(LinearLayout.VERTICAL);
+        root.addView(countBox);
+        section(countBox, "How many sounds");
         countLabel = tv("", 20, Color.WHITE, true);
         countLabel.setGravity(Gravity.CENTER);
-        patternsBox.addView(row(btn("-", v -> setCount(count - 1)), countLabel, btn("+", v -> setCount(count + 1))));
-        patternsBox.addView(tv("Under about 12 stays easy to learn. Asking for more later keeps the earlier ones unchanged.", 12, 0xff888888, false));
+        countBox.addView(row(btn("-", v -> setCount(count - 1)), countLabel, btn("+", v -> setCount(count + 1))));
+        countBox.addView(tv("Under about 12 stays easy to learn. Asking for more later keeps the earlier ones unchanged.", 12, 0xff888888, false));
 
         voicesBox = new LinearLayout(this);
         voicesBox.setOrientation(LinearLayout.VERTICAL);
         root.addView(voicesBox);
         section(voicesBox, "Contacts");
         voicesBox.addView(row(btn("Add from contacts", v -> pickContact()), btn("Add by name", v -> addByName())));
-        voicesBox.addView(tv("Tap a contact below to hear it, long-press for: say it as, new voice, remove. The contact picker hands the app only the contact you choose, and nothing leaves the phone. Each contact gets a voice as different as possible from the others.", 12, 0xff888888, false));
+        voicesBox.addView(tv("Tap a contact below to hear it, long-press for: say it as, new sound, remove. The contact picker hands the app only the contact you choose, and nothing leaves the phone. Each contact gets a sound as different as possible from the others. Contacts are shared by the three contact modes.", 12, 0xff888888, false));
 
         section(root, "Sounds (tap to hear)");
         info = tv("", 12, 0xff9ad0ff, false);
@@ -232,14 +237,18 @@ public class M extends Activity {
         fRate = field(adv, "Sample rate (Hz, 0 = as source)", false);
         cRev = check(adv, "Play the source backwards");
 
-        adv.addView(tv("VOICES (contact voices mode)", 12, 0xff888888, true));
+        adv.addView(tv("CONTACT MODES", 12, 0xff888888, true));
         fVSyll = field(adv, "Syllable length (ms)", false);
-        note(adv, "100-300. Shorter is faster and more mumbly.");
+        note(adv, "Voices and blips, 100-300. Shorter is faster.");
         fVPitch = field(adv, "Centre pitch (Hz)", false);
         note(adv, "150-500. Contact voices spread around this.");
         fVBreath = field(adv, "Breathiness (%)", false);
         fVMax = field(adv, "Longest name (syllables)", false);
         cFirst = check(adv, "Only the first word of a name");
+        fBNote = field(adv, "Blip length (ms)", false);
+        note(adv, "Blips mode, 50-400.");
+        fCSep = field(adv, "Name pattern separation", false);
+        note(adv, "Name patterns mode, 0-40: how far apart two contacts' patterns must be before one moves to the nearest free pattern.");
 
         adv.addView(tv("FILES", 12, 0xff888888, true));
         fPrefix = field(adv, "File name prefix", true);
@@ -304,6 +313,8 @@ public class M extends Activity {
         fVBreath.setText(String.valueOf(p.vBreath));
         fVMax.setText(String.valueOf(p.vMaxSyl));
         cFirst.setChecked(p.vFirst);
+        fBNote.setText(String.valueOf(p.bNote));
+        fCSep.setText(String.valueOf(p.cSep));
     }
 
     private static int num(EditText e, int dflt) {
@@ -333,6 +344,8 @@ public class M extends Activity {
         q.vBreath = num(fVBreath, q.vBreath);
         q.vMaxSyl = num(fVMax, q.vMaxSyl);
         q.vFirst = cFirst.isChecked();
+        q.bNote = num(fBNote, q.bNote);
+        q.cSep = num(fCSep, q.cSep);
         return q;
     }
 
@@ -458,11 +471,17 @@ public class M extends Activity {
 
     private void rebuild() {
         final int g = ++gen;
-        if ("voices".equals(mode)) {
+        if (Gen.isContacts(mode)) {
             final Params vp = prm.copy();
+            final String md = mode;
+            final float[] raw0 = raw;
+            final int rate0 = rawRate;
             final ArrayList<Contacts.C> snap = Contacts.parse(Contacts.serialize(people));
+            if ("cpat".equals(md) && raw0 == null) return;
             new Thread(() -> {
-                Gen.Result x = Gen.buildVoices(snap, vp);
+                Gen.Result x = "voices".equals(md) ? Gen.buildVoices(snap, vp)
+                        : "blips".equals(md) ? Gen.buildBlips(snap, vp) : Gen.buildCpat(snap, raw0, rate0, vp);
+                if (x == null) { say("The source sound is empty."); return; }
                 if (g != gen) return;
                 set = x;
                 runOnUiThread(() -> { if (g == gen) showList(x); });
@@ -493,28 +512,45 @@ public class M extends Activity {
             r.addView(tv(x.names[i], 18, Color.WHITE, false));
             r.addView(tv(x.details[i], 12, 0xff777777, false));
             r.setOnClickListener(v -> play(idx));
-            if ("voices".equals(mode)) r.setOnLongClickListener(v -> { personMenu(idx); return true; });
+            if (Gen.isContacts(mode)) r.setOnLongClickListener(v -> { personMenu(idx); return true; });
             list.addView(r);
         }
     }
 
     // ---------------------------------------------------------------- modes and contacts
 
-    private void toggleMode() {
-        mode = "voices".equals(mode) ? "patterns" : "voices";
-        sp.edit().putString("mode", mode).apply();
-        applyMode();
-        rebuild();
+    private static final String[] MODES = {"patterns", "voices", "blips", "cpat"};
+    private static final String[] MODE_TITLES = {"tone patterns", "contact voices", "contact blips", "contact name patterns"};
+    private static final String[] MODE_NOTES = {
+            "Short tone patterns built from a source sound, not tied to any contact.",
+            "Each contact's name is spoken as a fast mumble, in a voice of its own.",
+            "Each contact's name becomes a few electronic blips, one per syllable. Synthesised, not spoken.",
+            "The tone patterns of the first mode, but each contact's pattern follows the shape of its name."};
+
+    private int modeIndex() {
+        for (int i = 0; i < MODES.length; i++) if (MODES[i].equals(mode)) return i;
+        return 0;
+    }
+
+    private void chooseMode() {
+        new AlertDialog.Builder(this).setTitle("Mode")
+                .setSingleChoiceItems(MODE_TITLES, modeIndex(), (d, which) -> {
+                    mode = MODES[which];
+                    sp.edit().putString("mode", mode).apply();
+                    applyMode();
+                    rebuild();
+                    d.dismiss();
+                }).show();
     }
 
     private void applyMode() {
-        boolean v = "voices".equals(mode);
-        patternsBox.setVisibility(v ? View.GONE : View.VISIBLE);
-        voicesBox.setVisibility(v ? View.VISIBLE : View.GONE);
-        modeBtn.setText(v ? "Mode: contact voices (tap to switch)" : "Mode: tone patterns (tap to switch)");
-        modeNote.setText(v ? "Each contact's name is spoken as a fast mumble, in a voice of its own."
-                : "Short tone patterns built from a source sound. Switching modes loses nothing.");
-        if (!v) info.setText("");
+        boolean c = Gen.isContacts(mode);
+        srcBox.setVisibility("patterns".equals(mode) || "cpat".equals(mode) ? View.VISIBLE : View.GONE);
+        countBox.setVisibility("patterns".equals(mode) ? View.VISIBLE : View.GONE);
+        voicesBox.setVisibility(c ? View.VISIBLE : View.GONE);
+        modeBtn.setText("Mode: " + MODE_TITLES[modeIndex()] + " (tap to change)");
+        modeNote.setText(MODE_NOTES[modeIndex()] + " Switching modes loses nothing.");
+        info.setText("");
         list.removeAllViews();
         set = null;
     }
@@ -546,16 +582,19 @@ public class M extends Activity {
     }
 
     private void addPerson(String raw) {
-        String name = Contacts.clean(raw);
+        final String name = Contacts.clean(raw);
         if (name.isEmpty()) return;
         if (people.size() >= MAX_N) { say("That is the most contacts for now (" + MAX_N + ")."); return; }
-        Contacts.C c = new Contacts.C();
+        final Contacts.C c = new Contacts.C();
         c.name = name;
         people.add(c);
-        Contacts.assign(people, c, false);
-        savePeople();
-        say("Added " + name + ".");
-        rebuild();
+        final ArrayList<Contacts.C> snap = new ArrayList<>(people);
+        final Params pr = prm.copy();
+        say("Adding " + name + "...");
+        new Thread(() -> {
+            Contacts.init(snap, c, pr);          // picking sounds can take a moment with extreme settings
+            runOnUiThread(() -> { savePeople(); say("Added " + name + "."); rebuild(); });
+        }).start();
     }
 
     private void savePeople() { sp.edit().putString("contacts", Contacts.serialize(people)).apply(); }
@@ -564,9 +603,9 @@ public class M extends Activity {
         if (i < 0 || i >= people.size()) return;
         final Contacts.C c = people.get(i);
         new AlertDialog.Builder(this).setTitle(c.name)
-                .setItems(new String[]{"Say it as...", "New voice", "Remove"}, (d, which) -> {
+                .setItems(new String[]{"Say it as...", "New sound", "Remove"}, (d, which) -> {
                     if (which == 0) sayAs(c);
-                    else if (which == 1) { Contacts.assign(people, c, true); savePeople(); rebuild(); }
+                    else if (which == 1) { Contacts.reroll(people, c, mode, prm); savePeople(); rebuild(); }
                     else { people.remove(c); savePeople(); rebuild(); }
                 }).show();
     }

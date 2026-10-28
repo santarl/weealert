@@ -91,7 +91,8 @@ final class Codebook {
         return span;
     }
 
-    static Pattern[] pick(Params prm, int srcMs, int n) {
+    /** Every pattern the settings allow, in a fixed order, minus those that would exceed the max length. */
+    static ArrayList<Pattern> candidates(Params prm, int srcMs) {
         ArrayList<Pattern> all = new ArrayList<>();
         for (int k = prm.minNotes; k <= prm.maxNotes; k++) {
             int gc = pow(prm.gaps.length, k - 1), sc = pow(prm.semis.length, k);
@@ -103,6 +104,11 @@ final class Codebook {
         }
         if (all.isEmpty()) // nothing fits the cap: fall back to single notes, the renderer trims them
             for (int s = 0; s < prm.semis.length; s++) all.add(new Pattern(new int[0], new int[]{prm.semis[s]}));
+        return all;
+    }
+
+    static Pattern[] pick(Params prm, int srcMs, int n) {
+        ArrayList<Pattern> all = candidates(prm, srcMs);
 
         int cur = 0;
         if (prm.seed != 0) {

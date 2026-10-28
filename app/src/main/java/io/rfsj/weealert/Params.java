@@ -26,6 +26,8 @@ final class Params {
     int vBreath = 4;         // breathiness, percent
     int vMaxSyl = 4;         // longest name, in syllables
     boolean vFirst = true;   // use only the first word of a name
+    int bNote = 110;         // blips: length of one blip in ms
+    int cSep = 12;           // name patterns: how far apart two contacts' patterns must be before one is moved
 
     Params copy() { return parse(serialize()); }
 
@@ -80,6 +82,8 @@ final class Params {
         vPitch = clamp(vPitch, 150, 500);
         vBreath = clamp(vBreath, 0, 30);
         vMaxSyl = clamp(vMaxSyl, 1, 6);
+        bNote = clamp(bNote, 50, 400);
+        cSep = clamp(cSep, 0, 40);
         return ch;
     }
 
@@ -105,7 +109,8 @@ final class Params {
                 + "\nmaxNotes=" + maxNotes + "\nsemis=" + list(semis) + "\nrhythmW=" + rhythmW + "\nseed=" + seed
                 + "\ncut=" + cut + "\nfadeMs=" + fadeMs + "\nfalloff=" + falloff + "\nreverse=" + reverse
                 + "\nrate=" + rate + "\nlevelDb=" + levelDb + "\nnumbered=" + numbered + "\nprefix=" + prefix
-                + "\nvSyll=" + vSyll + "\nvPitch=" + vPitch + "\nvBreath=" + vBreath + "\nvMaxSyl=" + vMaxSyl + "\nvFirst=" + vFirst;
+                + "\nvSyll=" + vSyll + "\nvPitch=" + vPitch + "\nvBreath=" + vBreath + "\nvMaxSyl=" + vMaxSyl + "\nvFirst=" + vFirst
+                + "\nbNote=" + bNote + "\ncSep=" + cSep;
     }
 
     static Params parse(String s) {
@@ -138,6 +143,8 @@ final class Params {
                         case "vBreath": p.vBreath = Integer.parseInt(v); break;
                         case "vMaxSyl": p.vMaxSyl = Integer.parseInt(v); break;
                         case "vFirst": p.vFirst = Boolean.parseBoolean(v); break;
+                        case "bNote": p.bNote = Integer.parseInt(v); break;
+                        case "cSep": p.cSep = Integer.parseInt(v); break;
                         default: break;
                     }
                 } catch (NumberFormatException ignored) { }
