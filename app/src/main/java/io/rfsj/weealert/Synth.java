@@ -137,6 +137,21 @@ final class Synth {
         return o;
     }
 
+    /** Plays the sound faster or slower by the given number of semitones (the length changes with the pitch). */
+    static float[] pitchShift(float[] a, double semis) {
+        if (semis == 0 || a.length < 2) return a;
+        double r = Math.pow(2, semis / 12.0);
+        int n = (int) Math.min(Integer.MAX_VALUE / 4, Math.max(1, a.length / r));
+        float[] o = new float[n];
+        for (int j = 0; j < n; j++) {
+            double pos = j * r;
+            int i0 = (int) pos, i1 = Math.min(i0 + 1, a.length - 1);
+            float f = (float) (pos - i0);
+            o[j] = a[Math.min(i0, a.length - 1)] * (1 - f) + a[i1] * f;
+        }
+        return o;
+    }
+
     // ---------------------------------------------------------------- render
 
     static short[] render(Note src, Codebook.Pattern p, Params prm) {

@@ -175,9 +175,9 @@ final class Gen {
         for (int i = 0; i < list.size(); i++) {
             Contacts.C c = list.get(i);
             Params pi = pr.overlay(c.ov);
-            String phones = Say.phoneString(Say.syllables(c.text(), pi.vFirst, pi.vMaxSyl));
-            x.pcm[i] = finish(PBlip.render(phones, pi, raw, rawRate), rawRate, pi, rate);
-            x.details[i] = "phonemes: " + PBlip.show(phones) + (c.say.isEmpty() ? "" : "   say: " + c.say) + tag(c);
+            java.util.ArrayList<Say.Syl> syl = Say.syllables(c.text(), pi.vFirst, pi.vMaxSyl);
+            x.pcm[i] = finish(PBlip.renderSyls(syl, pi, pi.pbMaxTones, raw, rawRate), rawRate, pi, rate);
+            x.details[i] = "tones: " + PBlip.describe(syl, pi, pi.pbMaxTones) + (c.say.isEmpty() ? "" : "   say: " + c.say) + tag(c);
             if (Over.has(c.ov)) tuned++;
         }
         contactInfo(x, list.size(), 0, tuned);
@@ -233,22 +233,26 @@ final class Gen {
     // ---------------------------------------------------------------- ringtone parts
 
     /** Typed text as a sound: phoneme blips, a contact voice or name blips, as chosen by rtTextStyle. Null if nothing came out. */
-    static Synth.Note textNote(String text, Params p, float[] raw, int rawRate) {
+    static Synth.Note textNote(String text, Params p, float[] raw, int rawRate, double pitch) {
         if (raw == null || raw.length == 0) { raw = Synth.builtin(0); rawRate = Synth.BUILTIN_RATE; }
-        java.util.ArrayList<Say.Syl> syl = Say.syllables(text, false, 1000);
+        int cap = p.rtTextMax > 0 ? p.rtTextMax : 100000;
+        java.util.ArrayList<Say.Syl> syl = Say.syllables(text, false, p.rtTextStyle == 0 ? 100000 : cap);
         if (syl.isEmpty()) return null;
         int seed = Contacts.seed(text);
         float[] w;
         int rate = rawRate;
         if (p.rtTextStyle == 1) {
-            w = Voice.render(syl, 0, 100, 100, 0, p, seed);
+            w = Voice.render(syl, pitch, 100, 100, 0, p, seed);
             rate = Voice.RATE;
         } else if (p.rtTextStyle == 2) {
             Contacts.C neutral = new Contacts.C();
             neutral.bsrc = -1;
+            neutral.bpit = pitch;
             w = Blip.render(syl, neutral, p, seed, raw, rawRate);
         } else {
-            w = PBlip.render(Say.phoneString(syl), p, raw, rawRate);
+            Params pp = p.copy();
+            pp.pbPitch = p.pbPitch + pitch;
+            w = PBlip.renderSyls(syl, pp, cap == 100000 ? 0 : cap, raw, rawRate);
         }
         if (w.length < 16) return null;
         Synth.normalize(w, 0.9f);
@@ -261,11 +265,12 @@ final class Gen {
     /**
      * The prefix or suffix sound named by a setting ("b:<id>" built-in, "u:<uri>" file, "t:<text>" typed text),
      * ready to use; null for none or on failure. raw is the app's chosen source sound, used for typed text.
+     * pitch is the prefix's or suffix's own pitch in semitones from its normal pitch.
      */
-    static Synth.Note loadAux(Context c, String spec, Params p, float[] srcRaw, int srcRate) {
+    static Synth.Note loadAux(Context c, String spec, Params p, float[] srcRaw, int srcRate, double pitch) {
         if (spec == null || spec.length() < 3) return null;
         try {
-            if (spec.startsWith("t:")) return textNote(spec.substring(2), p, srcRaw, srcRate);
+            if (spec.startsWith("t:")) return textNote(spec.substring(2), p, srcRaw, srcRate, pitch);
             float[] raw;
             int rate;
             if (spec.startsWith("b:")) {
@@ -285,6 +290,7 @@ final class Gen {
             pb.rate = 0;
             pb.reverse = false;
             Synth.Note n = Synth.prepare(raw, rate, pb);
+            if (n.data.length >= 16 && pitch != 0) n.data = Synth.pitchShift(n.data, pitch);
             return n.data.length < 16 ? null : n;
         } catch (IOException | RuntimeException e) {
             return null;

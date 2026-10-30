@@ -55,6 +55,16 @@ The mode for names you can almost read by ear. Everyone shares one consistent vo
 
 Everything about it is configurable under *Settings*: the voice pitch, the speed of the rhythm, the vowel blip length, the time after a vowel and after a consonant, the consonant length, switching the consonant clicks and hisses off, and a phoneme table. The table lists the pitch of every sound in semitones, relative to the voice pitch, for example `a=0 e=3 i=6 o=-3 u=-6 s=8`. An entry can also carry a length and a level in percent (`s=8/80/70`), and you only write the entries you want to change. Long-press a contact to tune these values for that one name.
 
+### Long names
+
+Names with many sounds would turn into a smear of tones (*Konstantinos* is 12), so phoneme blips shortens them. The *long names* setting has three choices:
+
+- **0, keep every sound.**
+- **1, tone budget (default, 6 tones).** The least important sounds are dropped first and what is left keeps its usual pitch. From most to least important: the first sound of the name, the vowel of the first syllable, the vowel of the last syllable, the other vowels, the first consonant of each later syllable, then consonants inside a cluster, a consonant ending a syllable and a final consonant. Weak vowels (schwa) and h go first. Names that already fit are not touched, and the list marks a shortened name with *(shortened from N)*. The budget is a number you can set to anything, 0 for no limit.
+- **2, merge consonants into the vowel.** One tone per syllable. The consonants before a vowel stop being tones of their own: the first one adds its click, hiss or soft start to the vowel, and the pitch slides into the vowel from the pitch of the consonant next to it, the way the mouth does. A name that ends in a consonant gets one short tail tone. The slide time is a setting.
+
+The budget keeps mostly vowels in long names, which preserves the rhythm and the vowel melody; merge mode keeps the consonants audible as attacks. Both are heuristics, tuned by reasoning and not by listening tests.
+
 ## Tuning one sound
 
 Long-press any sound in the list and choose *Tune this sound...* to change the values of just that sound: the notes and gaps of a pattern, the voice or blip settings of a contact, and the shape and level (note length, fade-out, quieter per note, reverse, peak level and so on). Only values you change are stored; the rest keep following the general settings. A tuned sound keeps its name, so it stays assigned wherever you already set it, and the list marks it *(tuned)*. *Reset tuning* in the same menu undoes it. *New sound* on a contact picks a new assignment and drops the tuned values that belonged to the old one.
@@ -65,7 +75,7 @@ When an app asks for a ringtone (or an alarm tone) instead of a notification ton
 
 `[prefix sound] gap [the sound, repeated] gap [suffix sound] silence at the end`
 
-with an optional filter (low-pass, high-pass, band-pass or notch) over all of it. The prefix and suffix can be text you type (turned into sound the way names are: phoneme blips, a contact voice or name blips, your choice), a built-in sound, or any audio file you choose, with their own length, volume and gaps. Typed text keeps its natural length. Android repeats a ringtone file by itself with no pause between repeats, so the *gap at the end* is part of the file; the preview loops the file exactly as the phone will, and the picker has a field to change the gap on the spot. Ringtones are saved as `name-ringtone` (alarms as `name-alarm`) in the system Ringtones (Alarms) library, so they sit next to the notification version without replacing it. In the main screen, *Preview as ringtone* makes tapping a sound loop its ringtone version, and *Export as ringtones* writes `name-ringtone.wav` files to the export folder as a fallback.
+with an optional filter (low-pass, high-pass, band-pass or notch) over all of it. The prefix and suffix can be text you type (turned into sound the way names are: phoneme blips, a contact voice or name blips, your choice), a built-in sound, or any audio file you choose, with their own length, volume and gaps. Typed text has its own budget (tones for phoneme blips, syllables for the other styles, 10 by default, 0 for no limit), and the prefix and the suffix each have their own pitch in semitones, so they can sound like an announcer apart from the name; for a built-in or file sound the pitch is changed by playing it faster or slower, which changes its length too. Android repeats a ringtone file by itself with no pause between repeats, so the *gap at the end* is part of the file; the preview loops the file exactly as the phone will, and the picker has a field to change the gap on the spot. Ringtones are saved as `name-ringtone` (alarms as `name-alarm`) in the system Ringtones (Alarms) library, so they sit next to the notification version without replacing it. In the main screen, *Preview as ringtone* makes tapping a sound loop its ringtone version, and *Export as ringtones* writes `name-ringtone.wav` files to the export folder as a fallback.
 
 ## Settings
 

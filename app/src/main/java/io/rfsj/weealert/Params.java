@@ -42,6 +42,9 @@ final class Params {
     int pbConsDur = 55;      // time from a consonant to the next sound, ms
     int pbConsLen = 100;     // consonant blip length against its default, percent
     boolean pbEffects = true;// clicks, hisses, soft starts and glides on consonants
+    int pbReduce = 1;        // long names: 0 keep every sound, 1 tone budget (drop the least important), 2 merge consonants into the vowel after them
+    int pbMaxTones = 6;      // the budget for names, 0 = no limit
+    int pbGlideMs = 25;      // merge mode: how long the pitch slide from a consonant into its vowel takes, ms
     String pbTable = "";     // phoneme table overrides, e.g. "a=0 e=3 s=8/80/70"; empty = the defaults
     // ringtone (used when an app asks for a ringtone or alarm tone, and by the ringtone export)
     String rtPre = "", rtSuf = "";         // prefix and suffix sound: "" none, "b:<built-in id>", "u:<file uri>"
@@ -52,6 +55,8 @@ final class Params {
     int rtRepGap = 250;      // silence between repeats, ms
     int rtLoopGap = 1500;    // silence at the end, so the loop has a gap (Android repeats the file by itself)
     int rtTotal = 0;         // pad one cycle to at least this many ms, 0 = natural length
+    int rtTextMax = 10;      // longest typed text: tones for phoneme blips, syllables for the other styles, 0 = no limit
+    double rtPrePitch = 0, rtSufPitch = 0;   // pitch of the prefix and suffix, semitones from their normal pitch
     int rtTextStyle = 0;     // typed prefix/suffix text is made as: 0 phoneme blips, 1 contact voice, 2 name blips
     int rtFType = 0;         // filter over the whole ringtone: 0 off, 1 low-pass, 2 high-pass, 3 band-pass, 4 notch
     int rtFFreq = 2000;      // filter frequency, Hz
@@ -134,6 +139,12 @@ final class Params {
         rtTotal = atLeast(rtTotal, 0);
         rtFType = atLeast(rtFType, 0);
         rtTextStyle = atLeast(rtTextStyle, 0);
+        pbReduce = atLeast(pbReduce, 0);
+        pbMaxTones = atLeast(pbMaxTones, 0);
+        pbGlideMs = atLeast(pbGlideMs, 0);
+        rtTextMax = atLeast(rtTextMax, 0);
+        if (Double.isNaN(rtPrePitch)) { rtPrePitch = 0; ch = true; }
+        if (Double.isNaN(rtSufPitch)) { rtSufPitch = 0; ch = true; }
         pbSpeed = atLeast(pbSpeed, 1);
         pbLen = atLeast(pbLen, 1);
         pbVowelDur = atLeast(pbVowelDur, 0);
@@ -203,6 +214,8 @@ final class Params {
         m.put("pbPitch", fmt(pbPitch)); m.put("pbSpeed", String.valueOf(pbSpeed)); m.put("pbLen", String.valueOf(pbLen));
         m.put("pbVowelDur", String.valueOf(pbVowelDur)); m.put("pbConsDur", String.valueOf(pbConsDur));
         m.put("pbConsLen", String.valueOf(pbConsLen)); m.put("pbEffects", String.valueOf(pbEffects)); m.put("pbTable", pbTable);
+        m.put("pbReduce", String.valueOf(pbReduce)); m.put("pbMaxTones", String.valueOf(pbMaxTones)); m.put("pbGlideMs", String.valueOf(pbGlideMs));
+        m.put("rtTextMax", String.valueOf(rtTextMax)); m.put("rtPrePitch", fmt(rtPrePitch)); m.put("rtSufPitch", fmt(rtSufPitch));
         m.put("rtTextStyle", String.valueOf(rtTextStyle));
         m.put("rtPre", rtPre); m.put("rtSuf", rtSuf); m.put("rtPreGap", String.valueOf(rtPreGap)); m.put("rtSufGap", String.valueOf(rtSufGap));
         m.put("rtAuxMs", String.valueOf(rtAuxMs)); m.put("rtAuxVol", String.valueOf(rtAuxVol)); m.put("rtRepeat", String.valueOf(rtRepeat));
@@ -261,6 +274,12 @@ final class Params {
                     case "pbEffects": pbEffects = Boolean.parseBoolean(v); break;
                     case "pbTable": pbTable = v; break;
                     case "rtTextStyle": rtTextStyle = i(v); break;
+                    case "pbReduce": pbReduce = i(v); break;
+                    case "pbMaxTones": pbMaxTones = i(v); break;
+                    case "pbGlideMs": pbGlideMs = i(v); break;
+                    case "rtTextMax": rtTextMax = i(v); break;
+                    case "rtPrePitch": rtPrePitch = Double.parseDouble(v); break;
+                    case "rtSufPitch": rtSufPitch = Double.parseDouble(v); break;
                     case "rtPre": rtPre = v; break;
                     case "rtSuf": rtSuf = v; break;
                     case "rtPreGap": rtPreGap = i(v); break;

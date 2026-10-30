@@ -118,8 +118,8 @@ public class Pick extends Activity {
                 Params p = r.prm.copy();
                 Synth.Note a = null, s = null;
                 if (kind != Tones.NOTIFICATION) {
-                    a = Gen.loadAux(this, p.rtPre, p, r.raw, r.rawRate);
-                    s = Gen.loadAux(this, p.rtSuf, p, r.raw, r.rawRate);
+                    a = Gen.loadAux(this, p.rtPre, p, r.raw, r.rawRate, p.rtPrePitch);
+                    s = Gen.loadAux(this, p.rtSuf, p, r.raw, r.rawRate, p.rtSufPitch);
                 }
                 final Synth.Note fa = a, fs = s;
                 runOnUiThread(() -> { ring = p; pre = fa; suf = fs; show(r); });

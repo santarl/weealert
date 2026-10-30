@@ -121,6 +121,8 @@ final class Over {
                         new F("pbLen", "Vowel blip length (ms)", 0), new F("pbVowelDur", "Time after a vowel (ms)", 0),
                         new F("pbConsDur", "Time after a consonant (ms)", 0), new F("pbConsLen", "Consonant blip length (%)", 0),
                         new F("pbEffects", "Clicks, hisses and glides on consonants", 4),
+                        new F("pbReduce", "Long names: 0 keep every sound, 1 tone budget, 2 merge consonants into the vowel", 0),
+                        new F("pbMaxTones", "Tone budget (0 = no limit)", 0), new F("pbGlideMs", "Merge mode glide (ms)", 0),
                         new F("pbTable", "Phoneme table overrides (sym=pitch/len%/level%)", 5), fade, rev, levelDb,
                         new F("vMaxSyl", "Longest name (syllables)", 0)};
             default: // patterns and name patterns

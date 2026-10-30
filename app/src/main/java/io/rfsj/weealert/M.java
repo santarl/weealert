@@ -60,6 +60,7 @@ public class M extends Activity {
     private Button btnPre, btnSuf;
     private EditText fPbPitch, fPbSpeed, fPbLen, fPbVDur, fPbCDur, fPbCLen, fPbTable, fRtText;
     private CheckBox cPbFx;
+    private EditText fPbReduce, fPbMax, fPbGlide, fRtTextMax, fRtPrePitch, fRtSufPitch;
     private LinkedHashMap<String, String> ov = new LinkedHashMap<>();   // per-sound tuning of anonymous sounds, by pattern key
     private int loopingIdx = -1;
     private String auxKey = "";
@@ -277,6 +278,10 @@ public class M extends Activity {
         fPbCDur = field(adv, "Time from a consonant to the next sound (ms)", false);
         fPbCLen = field(adv, "Consonant blip length (%)", false);
         cPbFx = check(adv, "Clicks, hisses, soft starts and glides on consonants");
+        fPbReduce = field(adv, "Long names: 0 keep every sound, 1 tone budget, 2 merge consonants into the vowel", false);
+        fPbMax = field(adv, "Tone budget for names (0 = no limit)", false);
+        fPbGlide = field(adv, "Merge mode: pitch slide into the vowel (ms)", false);
+        note(adv, "Tone budget drops the least important sounds first (weak vowels and h, then the inside of consonant clusters and word endings), and what is left keeps its pitch. Merge mode plays one tone per syllable: the consonant before a vowel becomes its click, hiss or soft start and a short pitch slide into the vowel. A name ending in a consonant gets one short tail tone.");
         fPbTable = field(adv, "Phoneme table", true);
         fPbTable.setSingleLine(false);
         note(adv, "Pitch of every sound in semitones, relative to the voice pitch: vowels a e i o u @ (schwa), consonants p b t d k g C(ch) J(j) f v s z S(sh) Z(zh) T(th) h m n N(ng) l r w y. An entry can also carry a length and a level in percent: s=8/80/70. Edit only what you want to change.");
@@ -296,6 +301,10 @@ public class M extends Activity {
         fRtLoop = field(adv, "Gap at the end, between loops (ms)", false);
         fRtTotal = field(adv, "Make one ring at least this long (ms, 0 = natural)", false);
         fRtText = field(adv, "Typed prefix/suffix text is made as: 0 phoneme blips, 1 contact voice, 2 name blips", false);
+        fRtTextMax = field(adv, "Longest typed text (tones for phoneme blips, syllables otherwise, 0 = no limit)", false);
+        fRtPrePitch = fieldD(adv, "Prefix pitch (semitones)");
+        fRtSufPitch = fieldD(adv, "Suffix pitch (semitones)");
+        note(adv, "A different pitch for the prefix and the suffix makes them sound like an announcer apart from the name. For a built-in or file sound the pitch is changed by playing it faster or slower, so its length changes too.");
         fRtFType = field(adv, "Filter: 0 off, 1 low-pass, 2 high-pass, 3 band-pass, 4 notch", false);
         fRtFFreq = field(adv, "Filter frequency (Hz)", false);
         fRtFQ = fieldD(adv, "Filter resonance (Q)");
@@ -392,6 +401,12 @@ public class M extends Activity {
         fRtFQ.setText(Params.fmt(p.rtFQ));
         fRtLevel.setText(Params.fmt(p.rtLevel));
         fRtText.setText(String.valueOf(p.rtTextStyle));
+        fRtTextMax.setText(String.valueOf(p.rtTextMax));
+        fRtPrePitch.setText(Params.fmt(p.rtPrePitch));
+        fRtSufPitch.setText(Params.fmt(p.rtSufPitch));
+        fPbReduce.setText(String.valueOf(p.pbReduce));
+        fPbMax.setText(String.valueOf(p.pbMaxTones));
+        fPbGlide.setText(String.valueOf(p.pbGlideMs));
         fPbPitch.setText(Params.fmt(p.pbPitch));
         fPbSpeed.setText(String.valueOf(p.pbSpeed));
         fPbLen.setText(String.valueOf(p.pbLen));
@@ -450,6 +465,12 @@ public class M extends Activity {
         q.rtFQ = dbl(fRtFQ, q.rtFQ);
         q.rtLevel = dbl(fRtLevel, q.rtLevel);
         q.rtTextStyle = num(fRtText, q.rtTextStyle);
+        q.rtTextMax = num(fRtTextMax, q.rtTextMax);
+        q.rtPrePitch = dbl(fRtPrePitch, q.rtPrePitch);
+        q.rtSufPitch = dbl(fRtSufPitch, q.rtSufPitch);
+        q.pbReduce = num(fPbReduce, q.pbReduce);
+        q.pbMaxTones = num(fPbMax, q.pbMaxTones);
+        q.pbGlideMs = num(fPbGlide, q.pbGlideMs);
         q.pbPitch = dbl(fPbPitch, q.pbPitch);
         q.pbSpeed = num(fPbSpeed, q.pbSpeed);
         q.pbLen = num(fPbLen, q.pbLen);
@@ -918,10 +939,11 @@ public class M extends Activity {
 
     /** Loads the prefix and suffix sounds when the settings changed; call off the UI thread. */
     private synchronized void loadAuxIfNeeded(Params p) {
-        String key = p.rtPre + "|" + p.rtSuf + "|" + p.rtAuxMs + "|" + p.rtTextStyle + "|" + p.pbTable + "|" + p.pbLen + "|" + p.pbPitch;
+        String key = p.rtPre + "|" + p.rtSuf + "|" + p.rtAuxMs + "|" + p.rtTextStyle + "|" + p.pbTable + "|" + p.pbLen + "|" + p.pbPitch
+                + "|" + p.rtTextMax + "|" + p.rtPrePitch + "|" + p.rtSufPitch + "|" + p.pbReduce + "|" + p.pbMaxTones + "|" + p.pbGlideMs;
         if (key.equals(auxKey)) return;
-        auxPre = Gen.loadAux(this, p.rtPre, p, raw, rawRate);
-        auxSuf = Gen.loadAux(this, p.rtSuf, p, raw, rawRate);
+        auxPre = Gen.loadAux(this, p.rtPre, p, raw, rawRate, p.rtPrePitch);
+        auxSuf = Gen.loadAux(this, p.rtSuf, p, raw, rawRate, p.rtSufPitch);
         auxKey = key;
     }
 

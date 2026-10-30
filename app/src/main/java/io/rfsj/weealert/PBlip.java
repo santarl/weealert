@@ -102,6 +102,170 @@ final class PBlip {
         return mix;
     }
 
+    // ---------------------------------------------------------------- long names: fewer tones
+
+    private static final class Item {
+        final char ph;
+        int prio;
+        final int idx;
+        boolean dropped;
+        Item(char ph, int prio, int idx) { this.ph = ph; this.prio = prio; this.idx = idx; }
+    }
+
+    /**
+     * The phones of the syllables, with the least important ones dropped until at most maxTones remain
+     * (0 = keep all). What stays keeps its usual pitch. From most to least important: the first sound of the
+     * name, the vowel of the first syllable, the vowel of the last syllable, the other vowels, the first
+     * consonant of each later syllable, then consonants inside a cluster, a consonant ending a syllable, a
+     * final consonant; weak vowels (schwa) and h go first.
+     */
+    static String reduce(ArrayList<Say.Syl> syls, int maxTones) {
+        ArrayList<Item> items = new ArrayList<>();
+        int n = syls.size();
+        for (int j = 0; j < n; j++) {
+            Say.Syl s = syls.get(j);
+            for (int i = 0; i < s.on.length(); i++)
+                items.add(new Item(s.on.charAt(i), i > 0 ? 2 : (j == 0 ? 10 : 6), items.size()));
+            int pn = j == 0 ? 9 : j == n - 1 ? 8 : 7;
+            if (s.nuc == '@') pn = Math.min(pn, 4);
+            if (j == 0 && s.on.length() == 0) pn = 10;
+            items.add(new Item(s.nuc, pn, items.size()));
+            for (int i = 0; i < s.co.length(); i++) {
+                boolean last = j == n - 1 && i == s.co.length() - 1;
+                items.add(new Item(s.co.charAt(i), i > 0 || last ? 2 : 3, items.size()));
+            }
+        }
+        for (Item it : items) if (it.ph == 'h' && it.idx > 0) it.prio = 1;
+        if (maxTones > 0 && items.size() > maxTones) {
+            ArrayList<Item> order = new ArrayList<>(items);
+            java.util.Collections.sort(order, new java.util.Comparator<Item>() {
+                public int compare(Item a, Item b) { return a.prio != b.prio ? Integer.compare(a.prio, b.prio) : Integer.compare(b.idx, a.idx); }
+            });
+            for (int i = 0; i < items.size() - maxTones; i++) order.get(i).dropped = true;
+        }
+        StringBuilder b = new StringBuilder();
+        for (Item it : items) if (!it.dropped) b.append(it.ph);
+        return b.toString();
+    }
+
+    private static boolean endsWithCons(Say.Syl s) { return s.co.length() > 0; }
+
+    /** Merge mode groups: for every vowel the consonants just before it (a medial ending joins the next syllable). */
+    private static String consBefore(ArrayList<Say.Syl> syls, int j) {
+        return (j == 0 ? "" : syls.get(j - 1).co.toString()) + syls.get(j).on;
+    }
+
+    /**
+     * Merge mode: a tone per syllable. Consonants stop being tones of their own: the first one adds its click, hiss
+     * or soft start to the vowel, and the pitch slides into the vowel from the pitch of the consonant next to it, as
+     * the mouth does. A name that ends in a consonant gets one short tail tone.
+     */
+    static float[] renderMerged(ArrayList<Say.Syl> syls, Params p, float[] raw, int rate) {
+        if (syls.isEmpty() || raw.length == 0) return new float[0];
+        Map<Character, double[]> tbl = table(p.pbTable);
+        double maxLen = 100;
+        for (double[] v : tbl.values()) if (has(v[1])) maxLen = Math.max(maxLen, v[1]);
+        for (double d : DEF_LEN) maxLen = Math.max(maxLen, d * Math.max(1, p.pbConsLen / 100.0));
+        Params pb = p.copy();
+        pb.noteMs = (int) Math.max(1, Math.round(p.pbLen * maxLen / 100.0));
+        pb.rate = 0;
+        Synth.Note note = Synth.prepare(raw, rate, pb);
+        float[] src = note.data;
+        if (src.length < 64) return new float[0];
+        double speed = Math.max(1, p.pbSpeed) / 100.0;
+        int glideN = (int) ((long) p.pbGlideMs * rate / 1000);
+        ArrayList<float[]> notes = new ArrayList<>();
+        ArrayList<Integer> at = new ArrayList<>();
+        double t = 0;
+        int n = syls.size();
+        for (int j = 0; j < n; j++) {
+            Say.Syl s = syls.get(j);
+            String cons = consBefore(syls, j);
+            double[] ve = tbl.get(s.nuc);
+            double vp = p.pbPitch + (ve != null && has(ve[0]) ? ve[0] : 0);
+            double cp = vp;
+            if (!cons.isEmpty()) {
+                double[] ce = tbl.get(cons.charAt(cons.length() - 1));
+                cp = p.pbPitch + (ce != null && has(ce[0]) ? ce[0] : 0);
+            }
+            double lenPct = ve != null && has(ve[1]) ? ve[1] : 100;
+            double gain = (ve != null && has(ve[2]) ? ve[2] : 100) / 100.0;
+            float[] b = Blip.sweep(src, rate, cp, vp, glideN, (float) gain);
+            if (p.pbEffects && !cons.isEmpty()) Blip.transients(b, rate, cons.charAt(0), cons.charAt(0) * 0x9e3779b1);
+            int want = (int) Math.max(8, Math.round((long) p.pbLen * rate / 1000.0 * lenPct / 100.0));
+            b = trim(b, want, p, rate);
+            int pos = (int) (t * rate / 1000);
+            notes.add(b);
+            at.add(pos);
+            t += (p.pbVowelDur + 0.5 * p.pbConsDur * Math.min(2, cons.length())) / speed;
+        }
+        Say.Syl last = syls.get(n - 1);
+        if (endsWithCons(last)) {                                // a name ending in a consonant: one short tail tone
+            char ch = last.co.charAt(0);
+            int k = kind(ch);
+            double[] e = tbl.get(ch);
+            double pitch = p.pbPitch + (e != null && has(e[0]) ? e[0] : 0);
+            double lenPct = e != null && has(e[1]) ? e[1] : DEF_LEN[k] * p.pbConsLen / 100.0;
+            double gain = (e != null && has(e[2]) ? e[2] : DEF_GAIN[k]) / 100.0;
+            float[] b = Blip.blip(src, rate, pitch, p.pbEffects ? ch : 0, ch * 0x9e3779b1, (float) gain);
+            b = trim(b, (int) Math.max(8, Math.round((long) p.pbLen * rate / 1000.0 * lenPct / 100.0)), p, rate);
+            notes.add(b);
+            at.add((int) (t * rate / 1000));
+        }
+        return mix(notes, at, rate);
+    }
+
+    private static float[] trim(float[] b, int want, Params p, int rate) {
+        if (want >= b.length) return b;
+        b = java.util.Arrays.copyOf(b, want);
+        int fo = Math.min(want / 2, Math.max(rate / 250, (int) ((long) p.fadeMs * rate / 1000)));
+        for (int j = 0; j < fo; j++) b[want - 1 - j] *= j / (float) fo;
+        return b;
+    }
+
+    private static float[] mix(ArrayList<float[]> notes, ArrayList<Integer> at, int rate) {
+        int total = 0;
+        for (int n = 0; n < notes.size(); n++) total = Math.max(total, at.get(n) + notes.get(n).length);
+        if (total <= 0) return new float[0];
+        float[] mix = new float[total];
+        for (int n = 0; n < notes.size(); n++) {
+            float[] b = notes.get(n);
+            int pos = at.get(n);
+            for (int j = 0; j < b.length; j++) mix[pos + j] += b[j];
+        }
+        Synth.normalize(mix, 0.9f);
+        int fo = Math.min(total / 4, rate / 100);
+        for (int j = 0; j < fo; j++) mix[total - 1 - j] *= j / (float) fo;
+        return mix;
+    }
+
+    /** A name (or a typed text) as phoneme blips, shortened as the settings ask: maxTones is the budget (0 = none). */
+    static float[] renderSyls(ArrayList<Say.Syl> syls, Params p, int maxTones, float[] raw, int rate) {
+        if (syls.isEmpty()) return new float[0];
+        if (p.pbReduce == 2) return renderMerged(syls, p, raw, rate);
+        String phones = p.pbReduce == 1 ? reduce(syls, maxTones) : Say.phoneString(syls);
+        return render(phones, p, raw, rate);
+    }
+
+    /** What is played, for the list: the sounds that are left, or the merge groups. */
+    static String describe(ArrayList<Say.Syl> syls, Params p, int maxTones) {
+        if (syls.isEmpty()) return "";
+        if (p.pbReduce == 2) {
+            StringBuilder b = new StringBuilder();
+            for (int j = 0; j < syls.size(); j++) {
+                String c = consBefore(syls, j);
+                if (j > 0) b.append("  ");
+                b.append(c.isEmpty() ? "" : show(c).replace(" ", "") + "-").append(syls.get(j).nuc);
+            }
+            Say.Syl last = syls.get(syls.size() - 1);
+            if (endsWithCons(last)) b.append("  ").append(last.co.charAt(0));
+            return b.toString();
+        }
+        String all = Say.phoneString(syls);
+        String kept = p.pbReduce == 1 ? reduce(syls, maxTones) : all;
+        return show(kept) + (kept.length() < all.length() ? "   (shortened from " + all.length() + ")" : "");
+    }
+
     /** The phonemes of a name as a readable string, for the list. */
     static String show(String phones) {
         StringBuilder b = new StringBuilder();

@@ -71,16 +71,22 @@ final class Blip {
 
     /** One blip: the source note at a pitch, started in the way the first consonant asks for. */
     static float[] blip(float[] src, int rate, double semi, char on, int rnd, float gain) {
-        double r0 = Math.pow(2, semi / 12.0);
         double glide = in("lrw", on) ? -2 : on == 'y' ? 2 : 0;
-        double rmin = r0 * Math.pow(2, Math.min(0, glide) / 12.0);
-        int cap = (int) (src.length / rmin) + 8;
+        float[] o = sweep(src, rate, semi + glide, semi, rate * 30 / 1000, gain);
+        transients(o, rate, on, rnd);
+        return o;
+    }
+
+    /** The source note with its pitch gliding from one pitch to another over glideN samples, then staying there. */
+    static float[] sweep(float[] src, int rate, double fromSemi, double toSemi, int glideN, float gain) {
+        double rmin = Math.pow(2, Math.min(fromSemi, toSemi) / 12.0);
+        int cap = (int) Math.min(Integer.MAX_VALUE / 4, src.length / rmin + 8);
         float[] o = new float[cap];
-        int glideN = rate * 30 / 1000, len = 0;
-        double pos = 0;
+        int len = 0;
+        double pos = 0, r0 = Math.pow(2, toSemi / 12.0);
         for (int i = 0; i < cap; i++) {
             double r = r0;
-            if (glide != 0 && i < glideN) r = r0 * Math.pow(2, glide * (1 - i / (double) glideN) / 12.0);
+            if (fromSemi != toSemi && i < glideN) r = Math.pow(2, (toSemi + (fromSemi - toSemi) * (1 - i / (double) glideN)) / 12.0);
             int i0 = (int) pos;
             if (i0 >= src.length - 1) break;
             float f = (float) (pos - i0);
@@ -88,7 +94,12 @@ final class Blip {
             pos += r;
             len = i + 1;
         }
-        o = Arrays.copyOf(o, len);
+        return Arrays.copyOf(o, len);
+    }
+
+    /** What the first consonant adds to the start of a blip: a soft start, a click or a hiss. */
+    static void transients(float[] o, int rate, char on, int rnd) {
+        int len = o.length;
         int nz = rnd | 1;
         double prev = 0;
         if (in("mnN", on)) {                                   // nasals start softly
@@ -118,6 +129,5 @@ final class Blip {
                 o[i] += (float) (v * amp * (1 - i / (float) hl) * 0.8);
             }
         }
-        return o;
     }
 }
