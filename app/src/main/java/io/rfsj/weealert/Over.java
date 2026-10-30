@@ -10,7 +10,7 @@ import java.util.Map;
  * pitch, fsc, spd, con (voices) or bpit, bspd, blen, bcon (blips) for contacts. Pure Java.
  */
 final class Over {
-    /** One tunable field: type 0 whole number, 1 decimal, 2 list of whole numbers, 3 list of decimals, 4 yes/no. */
+    /** One tunable field: type 0 whole number, 1 decimal, 2 list of whole numbers, 3 list of decimals, 4 yes/no, 5 free text. */
     static final class F {
         final String key, label;
         final int type;
@@ -115,6 +115,14 @@ final class Over {
                         new F("bcon", "Pitch contour (0 wander, 1 rising, 2 falling, 3 bouncy)", 0),
                         new F("bNote", "Blip length base (ms)", 0), new F("vSyll", "Syllable length (ms)", 0),
                         new F("vMaxSyl", "Longest name (syllables)", 0), fade, rev, levelDb};
+            case "pblips":
+                return new F[]{
+                        new F("pbPitch", "Voice pitch (semitones)", 1), new F("pbSpeed", "Speed of the rhythm (%)", 0),
+                        new F("pbLen", "Vowel blip length (ms)", 0), new F("pbVowelDur", "Time after a vowel (ms)", 0),
+                        new F("pbConsDur", "Time after a consonant (ms)", 0), new F("pbConsLen", "Consonant blip length (%)", 0),
+                        new F("pbEffects", "Clicks, hisses and glides on consonants", 4),
+                        new F("pbTable", "Phoneme table overrides (sym=pitch/len%/level%)", 5), fade, rev, levelDb,
+                        new F("vMaxSyl", "Longest name (syllables)", 0)};
             default: // patterns and name patterns
                 return new F[]{
                         new F("gaps", "Gaps between notes (ms)", 2), new F("semis", "Pitch of each note (semitones)", 3),

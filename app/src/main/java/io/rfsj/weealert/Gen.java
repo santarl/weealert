@@ -22,10 +22,12 @@ final class Gen {
         Params prm;
         String info;
         String key = "";
+        float[] raw;               // the chosen source sound (null if it could not be read)
+        int rawRate;
     }
 
     static boolean isContacts(String mode) {
-        return "voices".equals(mode) || "blips".equals(mode) || "cpat".equals(mode);
+        return "voices".equals(mode) || "blips".equals(mode) || "cpat".equals(mode) || "pblips".equals(mode);
     }
 
     private static String num(double v) { return String.format(Locale.US, "%.1f", v).replace(".0", ""); }
@@ -162,6 +164,35 @@ final class Gen {
         return x;
     }
 
+    /** Phoneme blips: one consistent voice, every sound of the name with its own pitch. Null if the source is empty. */
+    static Result buildPBlips(List<Contacts.C> list, float[] raw, int rawRate, Params pr) {
+        float peak = 0;
+        for (float v : raw) peak = Math.max(peak, Math.abs(v));
+        if (peak <= 0) return null;
+        int rate = pr.rate > 0 ? pr.rate : rawRate;
+        Result x = contactResult(list, pr, rate);
+        int tuned = 0;
+        for (int i = 0; i < list.size(); i++) {
+            Contacts.C c = list.get(i);
+            Params pi = pr.overlay(c.ov);
+            String phones = Say.phoneString(Say.syllables(c.text(), pi.vFirst, pi.vMaxSyl));
+            x.pcm[i] = finish(PBlip.render(phones, pi, raw, rawRate), rawRate, pi, rate);
+            x.details[i] = "phonemes: " + PBlip.show(phones) + (c.say.isEmpty() ? "" : "   say: " + c.say) + tag(c);
+            if (Over.has(c.ov)) tuned++;
+        }
+        contactInfo(x, list.size(), 0, tuned);
+        StringBuilder same = new StringBuilder();
+        int pairs = 0;
+        for (int i = 0; i < x.pcm.length; i++)
+            for (int j = i + 1; j < x.pcm.length; j++)
+                if (java.util.Arrays.equals(x.pcm[i], x.pcm[j]) && pairs++ < 3) {
+                    if (same.length() > 0) same.append(", ");
+                    same.append(x.names[i]).append(" = ").append(x.names[j]);
+                }
+        x.info = x.info.replaceAll(", closest pair [^,]*", "") + (pairs > 0 ? ". Sounds identical (same pronunciation): " + same + (pairs > 3 ? ", ..." : "") : "");
+        return x;
+    }
+
     /** Name patterns: the old tone patterns, each contact's chosen to follow its name. Null if the source is empty. */
     static Result buildCpat(List<Contacts.C> list, float[] raw, int rawRate, Params pr) {
         Synth.Note note = Synth.prepare(raw, rawRate, pr);
@@ -201,10 +232,40 @@ final class Gen {
 
     // ---------------------------------------------------------------- ringtone parts
 
-    /** The prefix or suffix sound named by a setting ("b:<id>" built-in, "u:<uri>" file), ready to use; null for none or on failure. */
-    static Synth.Note loadAux(Context c, String spec, Params p) {
+    /** Typed text as a sound: phoneme blips, a contact voice or name blips, as chosen by rtTextStyle. Null if nothing came out. */
+    static Synth.Note textNote(String text, Params p, float[] raw, int rawRate) {
+        if (raw == null || raw.length == 0) { raw = Synth.builtin(0); rawRate = Synth.BUILTIN_RATE; }
+        java.util.ArrayList<Say.Syl> syl = Say.syllables(text, false, 1000);
+        if (syl.isEmpty()) return null;
+        int seed = Contacts.seed(text);
+        float[] w;
+        int rate = rawRate;
+        if (p.rtTextStyle == 1) {
+            w = Voice.render(syl, 0, 100, 100, 0, p, seed);
+            rate = Voice.RATE;
+        } else if (p.rtTextStyle == 2) {
+            Contacts.C neutral = new Contacts.C();
+            neutral.bsrc = -1;
+            w = Blip.render(syl, neutral, p, seed, raw, rawRate);
+        } else {
+            w = PBlip.render(Say.phoneString(syl), p, raw, rawRate);
+        }
+        if (w.length < 16) return null;
+        Synth.normalize(w, 0.9f);
+        Synth.Note n = new Synth.Note();
+        n.data = w;
+        n.rate = rate;
+        return n;
+    }
+
+    /**
+     * The prefix or suffix sound named by a setting ("b:<id>" built-in, "u:<uri>" file, "t:<text>" typed text),
+     * ready to use; null for none or on failure. raw is the app's chosen source sound, used for typed text.
+     */
+    static Synth.Note loadAux(Context c, String spec, Params p, float[] srcRaw, int srcRate) {
         if (spec == null || spec.length() < 3) return null;
         try {
+            if (spec.startsWith("t:")) return textNote(spec.substring(2), p, srcRaw, srcRate);
             float[] raw;
             int rate;
             if (spec.startsWith("b:")) {
@@ -249,35 +310,32 @@ final class Gen {
                 + (isContacts(mode) ? "|" + contactsRaw : "|" + ovRaw);
         if (key.equals(lastKey) && last != null) return last;
 
+        float[] raw = null;
+        int rate = Synth.BUILTIN_RATE;
+        if (src != null) {
+            try {
+                Decode.Pcm p = Decode.read(c, Uri.parse(src));
+                raw = p.data;
+                rate = p.rate;
+            } catch (IOException | RuntimeException ignored) { }
+        }
+        if (raw == null) {
+            if (!Synth.hasBuiltin(builtin)) builtin = 0;
+            raw = Synth.builtin(builtin);
+            rate = Synth.BUILTIN_RATE;
+        }
         Result x;
-        if ("voices".equals(mode)) {
+        if ("voices".equals(mode) || "blips".equals(mode) || "cpat".equals(mode) || "pblips".equals(mode)) {
             ArrayList<Contacts.C> list = Contacts.parse(contactsRaw);
             Contacts.ensure(list, pr);
-            x = buildVoices(list, pr);
+            x = "voices".equals(mode) ? buildVoices(list, pr) : "blips".equals(mode) ? buildBlips(list, raw, rate, pr)
+                    : "pblips".equals(mode) ? buildPBlips(list, raw, rate, pr) : buildCpat(list, raw, rate, pr);
         } else {
-            float[] raw = null;
-            int rate = Synth.BUILTIN_RATE;
-            if (src != null) {
-                try {
-                    Decode.Pcm p = Decode.read(c, Uri.parse(src));
-                    raw = p.data;
-                    rate = p.rate;
-                } catch (IOException | RuntimeException ignored) { }
-            }
-            if (raw == null) {
-                if (!Synth.hasBuiltin(builtin)) builtin = 0;
-                raw = Synth.builtin(builtin);
-                rate = Synth.BUILTIN_RATE;
-            }
-            if ("cpat".equals(mode) || "blips".equals(mode)) {
-                ArrayList<Contacts.C> list = Contacts.parse(contactsRaw);
-                Contacts.ensure(list, pr);
-                x = "cpat".equals(mode) ? buildCpat(list, raw, rate, pr) : buildBlips(list, raw, rate, pr);
-            } else {
-                x = build(raw, rate, pr, n, Over.parseAll(ovRaw));
-            }
+            x = build(raw, rate, pr, n, Over.parseAll(ovRaw));
         }
         if (x == null) throw new IOException("the source sound is empty");
+        x.raw = raw;
+        x.rawRate = rate;
         x.key = Integer.toHexString(key.hashCode());
         lastKey = key;
         last = x;

@@ -58,6 +58,8 @@ public class M extends Activity {
     private CheckBox cFirst, cRingPrev;
     private EditText fRtPreGap, fRtSufGap, fRtAuxMs, fRtAuxVol, fRtRepeat, fRtRepGap, fRtLoop, fRtTotal, fRtFType, fRtFFreq, fRtFQ, fRtLevel;
     private Button btnPre, btnSuf;
+    private EditText fPbPitch, fPbSpeed, fPbLen, fPbVDur, fPbCDur, fPbCLen, fPbTable, fRtText;
+    private CheckBox cPbFx;
     private LinkedHashMap<String, String> ov = new LinkedHashMap<>();   // per-sound tuning of anonymous sounds, by pattern key
     private int loopingIdx = -1;
     private String auxKey = "";
@@ -267,6 +269,18 @@ public class M extends Activity {
         fCSep = field(adv, "Name pattern separation", false);
         note(adv, "Name patterns mode: how far apart two contacts' patterns must be before one moves to the nearest free pattern.");
 
+        adv.addView(tv("PHONEME BLIPS (one consistent voice, every sound of a name has its own pitch)", 12, 0xff888888, true));
+        fPbPitch = fieldD(adv, "Voice pitch (semitones)");
+        fPbSpeed = field(adv, "Speed of the rhythm (%)", false);
+        fPbLen = field(adv, "Vowel blip length (ms)", false);
+        fPbVDur = field(adv, "Time from a vowel to the next sound (ms)", false);
+        fPbCDur = field(adv, "Time from a consonant to the next sound (ms)", false);
+        fPbCLen = field(adv, "Consonant blip length (%)", false);
+        cPbFx = check(adv, "Clicks, hisses, soft starts and glides on consonants");
+        fPbTable = field(adv, "Phoneme table", true);
+        fPbTable.setSingleLine(false);
+        note(adv, "Pitch of every sound in semitones, relative to the voice pitch: vowels a e i o u @ (schwa), consonants p b t d k g C(ch) J(j) f v s z S(sh) Z(zh) T(th) h m n N(ng) l r w y. An entry can also carry a length and a level in percent: s=8/80/70. Edit only what you want to change.");
+
         adv.addView(tv("RINGTONE (when an app asks for a ringtone or alarm tone)", 12, 0xff888888, true));
         note(adv, "A ringtone is the sound with an optional prefix and suffix around it, an optional filter over all of it, and a silent gap at the end. Android repeats the file by itself, with no pause, so the gap is part of the file.");
         btnPre = btn("", v -> pickAux(true));
@@ -281,6 +295,7 @@ public class M extends Activity {
         fRtRepGap = field(adv, "Gap between those repeats (ms)", false);
         fRtLoop = field(adv, "Gap at the end, between loops (ms)", false);
         fRtTotal = field(adv, "Make one ring at least this long (ms, 0 = natural)", false);
+        fRtText = field(adv, "Typed prefix/suffix text is made as: 0 phoneme blips, 1 contact voice, 2 name blips", false);
         fRtFType = field(adv, "Filter: 0 off, 1 low-pass, 2 high-pass, 3 band-pass, 4 notch", false);
         fRtFFreq = field(adv, "Filter frequency (Hz)", false);
         fRtFQ = fieldD(adv, "Filter resonance (Q)");
@@ -376,6 +391,15 @@ public class M extends Activity {
         fRtFFreq.setText(String.valueOf(p.rtFFreq));
         fRtFQ.setText(Params.fmt(p.rtFQ));
         fRtLevel.setText(Params.fmt(p.rtLevel));
+        fRtText.setText(String.valueOf(p.rtTextStyle));
+        fPbPitch.setText(Params.fmt(p.pbPitch));
+        fPbSpeed.setText(String.valueOf(p.pbSpeed));
+        fPbLen.setText(String.valueOf(p.pbLen));
+        fPbVDur.setText(String.valueOf(p.pbVowelDur));
+        fPbCDur.setText(String.valueOf(p.pbConsDur));
+        fPbCLen.setText(String.valueOf(p.pbConsLen));
+        cPbFx.setChecked(p.pbEffects);
+        fPbTable.setText(p.pbTable.isEmpty() ? PBlip.DEFAULT_TABLE : p.pbTable);
         updateAuxButtons();
     }
 
@@ -425,6 +449,16 @@ public class M extends Activity {
         q.rtFFreq = num(fRtFFreq, q.rtFFreq);
         q.rtFQ = dbl(fRtFQ, q.rtFQ);
         q.rtLevel = dbl(fRtLevel, q.rtLevel);
+        q.rtTextStyle = num(fRtText, q.rtTextStyle);
+        q.pbPitch = dbl(fPbPitch, q.pbPitch);
+        q.pbSpeed = num(fPbSpeed, q.pbSpeed);
+        q.pbLen = num(fPbLen, q.pbLen);
+        q.pbVowelDur = num(fPbVDur, q.pbVowelDur);
+        q.pbConsDur = num(fPbCDur, q.pbConsDur);
+        q.pbConsLen = num(fPbCLen, q.pbConsLen);
+        q.pbEffects = cPbFx.isChecked();
+        String tbl = fPbTable.getText().toString().trim().replaceAll("\\s+", " ");
+        q.pbTable = tbl.equals(PBlip.DEFAULT_TABLE) ? "" : tbl;
         return q;
     }
 
@@ -557,16 +591,18 @@ public class M extends Activity {
 
     private void rebuild() {
         final int g = ++gen;
+        auxKey = "";
         if (Gen.isContacts(mode)) {
             final Params vp = prm.copy();
             final String md = mode;
             final float[] raw0 = raw;
             final int rate0 = rawRate;
             final ArrayList<Contacts.C> snap = Contacts.parse(Contacts.serialize(people));
-            if (("cpat".equals(md) || "blips".equals(md)) && raw0 == null) return;
+            if (!"voices".equals(md) && raw0 == null) return;
             new Thread(() -> {
                 Gen.Result x = "voices".equals(md) ? Gen.buildVoices(snap, vp)
-                        : "blips".equals(md) ? Gen.buildBlips(snap, raw0, rate0, vp) : Gen.buildCpat(snap, raw0, rate0, vp);
+                        : "blips".equals(md) ? Gen.buildBlips(snap, raw0, rate0, vp)
+                        : "pblips".equals(md) ? Gen.buildPBlips(snap, raw0, rate0, vp) : Gen.buildCpat(snap, raw0, rate0, vp);
                 if (x == null) { say("The source sound is empty."); return; }
                 if (g != gen) return;
                 set = x;
@@ -606,13 +642,14 @@ public class M extends Activity {
 
     // ---------------------------------------------------------------- modes and contacts
 
-    private static final String[] MODES = {"patterns", "voices", "blips", "cpat"};
-    private static final String[] MODE_TITLES = {"tone patterns", "contact voices", "contact blips", "contact name patterns"};
+    private static final String[] MODES = {"patterns", "voices", "blips", "cpat", "pblips"};
+    private static final String[] MODE_TITLES = {"tone patterns", "contact voices", "contact blips", "contact name patterns", "contact phoneme blips"};
     private static final String[] MODE_NOTES = {
             "Short tone patterns built from a source sound, not tied to any contact.",
             "Each contact's name is spoken as a fast mumble, in a voice of its own.",
             "Each contact's name becomes a few blips of the source sound, one per syllable. Synthesised, not spoken.",
-            "The tone patterns of the first mode, but each contact's pattern follows the shape of its name."};
+            "The tone patterns of the first mode, but each contact's pattern follows the shape of its name.",
+            "One consistent voice for everyone: every sound of the name has its own pitch and the rhythm follows the pronunciation, so a name is almost readable by ear."};
 
     private int modeIndex() {
         for (int i = 0; i < MODES.length; i++) if (MODES[i].equals(mode)) return i;
@@ -702,7 +739,7 @@ public class M extends Activity {
         final ArrayList<String> items = new ArrayList<>();
         items.add("Tune this sound...");
         if (t) items.add("Reset tuning");
-        if (contacts) { items.add("Say it as..."); items.add("New sound"); items.add("Remove"); }
+        if (contacts) { items.add("Say it as..."); if (!"pblips".equals(mode)) items.add("New sound"); items.add("Remove"); }
         new AlertDialog.Builder(this).setTitle(x.names[i])
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     String it = items.get(which);
@@ -741,6 +778,7 @@ public class M extends Activity {
         } else {
             base.put("gaps", Params.list(x.pats[i].gaps)); base.put("semis", Params.list(x.pats[i].semis));
         }
+        if (prm.pbTable.isEmpty()) base.put("pbTable", PBlip.DEFAULT_TABLE);
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(18), dp(8), dp(18), dp(8));
@@ -757,6 +795,7 @@ public class M extends Activity {
                 views.put(f.key, cb);
             } else {
                 EditText e = f.type == 1 ? fieldD(box, label) : field(box, label, f.type >= 2);
+                if (f.type == 5) e.setSingleLine(false);
                 e.setText(eff);
                 views.put(f.key, e);
             }
@@ -780,6 +819,7 @@ public class M extends Activity {
                     } else {
                         txt = ((EditText) w).getText().toString().trim();
                         if (txt.isEmpty()) { kv.remove(f.key); continue; }
+                        if (f.type == 5) { txt = txt.replaceAll("\\s+", " "); same = txt.equals(b); if (same) kv.remove(f.key); else kv.put(f.key, txt); continue; }
                         if (f.type == 0 || f.type == 1) {
                             double nv = Double.parseDouble(txt);
                             txt = f.type == 0 ? String.valueOf(Math.round(nv)) : Params.fmt(nv);
@@ -822,6 +862,7 @@ public class M extends Activity {
             try { return "built-in " + Synth.BUILTIN[Integer.parseInt(spec.substring(2).trim())]; } catch (RuntimeException e) { return "built-in"; }
         }
         if (spec.startsWith("u:")) return "file " + displayName(Uri.parse(spec.substring(2)));
+        if (spec.startsWith("t:")) return "text \"" + spec.substring(2) + "\"";
         return "none";
     }
 
@@ -836,10 +877,12 @@ public class M extends Activity {
         names.add("None");
         for (int k = 0; k < Synth.BUILTIN.length; k++)
             if (Synth.hasBuiltin(k)) { ids.add(k); names.add("Built-in: " + Synth.BUILTIN[k]); }
+        names.add("Type text...");
         names.add("Choose a file...");
         new AlertDialog.Builder(this).setTitle(pre ? "Prefix sound" : "Suffix sound")
                 .setItems(names.toArray(new String[0]), (d, which) -> {
                     if (which == 0) setAux(pre, "");
+                    else if (which == names.size() - 2) typeAux(pre);
                     else if (which == names.size() - 1) {
                         Intent in = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                         in.addCategory(Intent.CATEGORY_OPENABLE);
@@ -848,6 +891,22 @@ public class M extends Activity {
                         startActivityForResult(in, pre ? RC_PRE : RC_SUF);
                     } else setAux(pre, "b:" + ids.get(which - 1));
                 }).show();
+    }
+
+    private void typeAux(final boolean pre) {
+        final EditText e = new EditText(this);
+        e.setSingleLine(true);
+        e.setHint("e.g. incoming call");
+        String cur = pre ? prm.rtPre : prm.rtSuf;
+        if (cur != null && cur.startsWith("t:")) e.setText(cur.substring(2));
+        new AlertDialog.Builder(this).setTitle(pre ? "Prefix text" : "Suffix text")
+                .setMessage("The text is turned into sound the way names are (see the typed text setting under Ringtone). Empty clears it.")
+                .setView(e)
+                .setPositiveButton("OK", (d, w) -> {
+                    String t = e.getText().toString().replace('\n', ' ').trim();
+                    setAux(pre, t.isEmpty() ? "" : "t:" + t);
+                })
+                .setNegativeButton("Cancel", null).show();
     }
 
     private void setAux(boolean pre, String spec) {
@@ -859,10 +918,10 @@ public class M extends Activity {
 
     /** Loads the prefix and suffix sounds when the settings changed; call off the UI thread. */
     private synchronized void loadAuxIfNeeded(Params p) {
-        String key = p.rtPre + "|" + p.rtSuf + "|" + p.rtAuxMs;
+        String key = p.rtPre + "|" + p.rtSuf + "|" + p.rtAuxMs + "|" + p.rtTextStyle + "|" + p.pbTable + "|" + p.pbLen + "|" + p.pbPitch;
         if (key.equals(auxKey)) return;
-        auxPre = Gen.loadAux(this, p.rtPre, p);
-        auxSuf = Gen.loadAux(this, p.rtSuf, p);
+        auxPre = Gen.loadAux(this, p.rtPre, p, raw, rawRate);
+        auxSuf = Gen.loadAux(this, p.rtSuf, p, raw, rawRate);
         auxKey = key;
     }
 

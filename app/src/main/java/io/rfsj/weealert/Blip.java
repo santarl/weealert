@@ -70,7 +70,7 @@ final class Blip {
     }
 
     /** One blip: the source note at a pitch, started in the way the first consonant asks for. */
-    private static float[] blip(float[] src, int rate, double semi, char on, int rnd, float gain) {
+    static float[] blip(float[] src, int rate, double semi, char on, int rnd, float gain) {
         double r0 = Math.pow(2, semi / 12.0);
         double glide = in("lrw", on) ? -2 : on == 'y' ? 2 : 0;
         double rmin = r0 * Math.pow(2, Math.min(0, glide) / 12.0);

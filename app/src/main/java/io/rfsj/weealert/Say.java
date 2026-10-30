@@ -173,4 +173,11 @@ final class Say {
         }
         return out;
     }
+
+    /** The phone symbols of a list of syllables, in order. */
+    static String phoneString(ArrayList<Syl> syls) {
+        StringBuilder b = new StringBuilder();
+        for (Syl y : syls) b.append(y.on).append(y.nuc).append(y.co);
+        return b.toString();
+    }
 }

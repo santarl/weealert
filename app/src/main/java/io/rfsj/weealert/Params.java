@@ -34,6 +34,15 @@ final class Params {
     boolean vFirst = true;   // use only the first word of a name
     int bNote = 110;         // blips: length of one blip in ms
     int cSep = 12;           // name patterns: how far apart two contacts' patterns must be before one is moved
+    // phoneme blips: one consistent voice, every sound of the name has its own pitch
+    double pbPitch = 0;      // pitch of the whole voice, semitones
+    int pbSpeed = 100;       // speed of the rhythm, percent (blip length is not affected)
+    int pbLen = 90;          // length of a vowel blip, ms
+    int pbVowelDur = 120;    // time from a vowel to the next sound, ms
+    int pbConsDur = 55;      // time from a consonant to the next sound, ms
+    int pbConsLen = 100;     // consonant blip length against its default, percent
+    boolean pbEffects = true;// clicks, hisses, soft starts and glides on consonants
+    String pbTable = "";     // phoneme table overrides, e.g. "a=0 e=3 s=8/80/70"; empty = the defaults
     // ringtone (used when an app asks for a ringtone or alarm tone, and by the ringtone export)
     String rtPre = "", rtSuf = "";         // prefix and suffix sound: "" none, "b:<built-in id>", "u:<file uri>"
     int rtPreGap = 150, rtSufGap = 150;    // silence between prefix / sound / suffix, ms
@@ -43,6 +52,7 @@ final class Params {
     int rtRepGap = 250;      // silence between repeats, ms
     int rtLoopGap = 1500;    // silence at the end, so the loop has a gap (Android repeats the file by itself)
     int rtTotal = 0;         // pad one cycle to at least this many ms, 0 = natural length
+    int rtTextStyle = 0;     // typed prefix/suffix text is made as: 0 phoneme blips, 1 contact voice, 2 name blips
     int rtFType = 0;         // filter over the whole ringtone: 0 off, 1 low-pass, 2 high-pass, 3 band-pass, 4 notch
     int rtFFreq = 2000;      // filter frequency, Hz
     double rtFQ = 0.707;     // filter resonance
@@ -123,6 +133,14 @@ final class Params {
         rtLoopGap = atLeast(rtLoopGap, 0);
         rtTotal = atLeast(rtTotal, 0);
         rtFType = atLeast(rtFType, 0);
+        rtTextStyle = atLeast(rtTextStyle, 0);
+        pbSpeed = atLeast(pbSpeed, 1);
+        pbLen = atLeast(pbLen, 1);
+        pbVowelDur = atLeast(pbVowelDur, 0);
+        pbConsDur = atLeast(pbConsDur, 0);
+        pbConsLen = atLeast(pbConsLen, 0);
+        if (Double.isNaN(pbPitch)) { pbPitch = 0; ch = true; }
+        pbTable = pbTable.replace('\n', ' ').replace(';', ' ').trim();
         rtFFreq = atLeast(rtFFreq, 0);
         if (Double.isNaN(rtFQ) || rtFQ <= 0) { rtFQ = 0.707; ch = true; }
         if (Double.isNaN(rtLevel)) { rtLevel = -1; ch = true; }
@@ -182,6 +200,10 @@ final class Params {
         m.put("vSyll", String.valueOf(vSyll)); m.put("vPitch", String.valueOf(vPitch)); m.put("vBreath", String.valueOf(vBreath));
         m.put("vMaxSyl", String.valueOf(vMaxSyl)); m.put("vFirst", String.valueOf(vFirst));
         m.put("bNote", String.valueOf(bNote)); m.put("cSep", String.valueOf(cSep));
+        m.put("pbPitch", fmt(pbPitch)); m.put("pbSpeed", String.valueOf(pbSpeed)); m.put("pbLen", String.valueOf(pbLen));
+        m.put("pbVowelDur", String.valueOf(pbVowelDur)); m.put("pbConsDur", String.valueOf(pbConsDur));
+        m.put("pbConsLen", String.valueOf(pbConsLen)); m.put("pbEffects", String.valueOf(pbEffects)); m.put("pbTable", pbTable);
+        m.put("rtTextStyle", String.valueOf(rtTextStyle));
         m.put("rtPre", rtPre); m.put("rtSuf", rtSuf); m.put("rtPreGap", String.valueOf(rtPreGap)); m.put("rtSufGap", String.valueOf(rtSufGap));
         m.put("rtAuxMs", String.valueOf(rtAuxMs)); m.put("rtAuxVol", String.valueOf(rtAuxVol)); m.put("rtRepeat", String.valueOf(rtRepeat));
         m.put("rtRepGap", String.valueOf(rtRepGap)); m.put("rtLoopGap", String.valueOf(rtLoopGap)); m.put("rtTotal", String.valueOf(rtTotal));
@@ -230,6 +252,15 @@ final class Params {
                     case "vFirst": vFirst = Boolean.parseBoolean(v); break;
                     case "bNote": bNote = i(v); break;
                     case "cSep": cSep = i(v); break;
+                    case "pbPitch": pbPitch = Double.parseDouble(v); break;
+                    case "pbSpeed": pbSpeed = i(v); break;
+                    case "pbLen": pbLen = i(v); break;
+                    case "pbVowelDur": pbVowelDur = i(v); break;
+                    case "pbConsDur": pbConsDur = i(v); break;
+                    case "pbConsLen": pbConsLen = i(v); break;
+                    case "pbEffects": pbEffects = Boolean.parseBoolean(v); break;
+                    case "pbTable": pbTable = v; break;
+                    case "rtTextStyle": rtTextStyle = i(v); break;
                     case "rtPre": rtPre = v; break;
                     case "rtSuf": rtSuf = v; break;
                     case "rtPreGap": rtPreGap = i(v); break;
