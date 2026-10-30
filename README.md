@@ -49,22 +49,38 @@ The tone patterns of the first mode, played with the source sound chosen there, 
 
 Everything else works the same in all modes: tone picker, file picker, Add to system tones, Export, and the max length, level, sample rate and file name settings.
 
+## Tuning one sound
+
+Long-press any sound in the list and choose *Tune this sound...* to change the values of just that sound: the notes and gaps of a pattern, the voice or blip settings of a contact, and the shape and level (note length, fade-out, quieter per note, reverse, peak level and so on). Only values you change are stored; the rest keep following the general settings. A tuned sound keeps its name, so it stays assigned wherever you already set it, and the list marks it *(tuned)*. *Reset tuning* in the same menu undoes it. *New sound* on a contact picks a new assignment and drops the tuned values that belonged to the old one.
+
+## Ringtones
+
+When an app asks for a ringtone (or an alarm tone) instead of a notification tone, weealert answers that too, with the same picker: tap a sound to hear it, press Use. A ringtone is built from the sound like this:
+
+`[prefix sound] gap [the sound, repeated] gap [suffix sound] silence at the end`
+
+with an optional filter (low-pass, high-pass, band-pass or notch) over all of it. The prefix and suffix can be a built-in sound or any audio file you choose, with their own length, volume and gaps. Android repeats a ringtone file by itself with no pause between repeats, so the *gap at the end* is part of the file; the preview loops the file exactly as the phone will, and the picker has a field to change the gap on the spot. Ringtones are saved as `name-ringtone` (alarms as `name-alarm`) in the system Ringtones (Alarms) library, so they sit next to the notification version without replacing it. In the main screen, *Preview as ringtone* makes tapping a sound loop its ringtone version, and *Export as ringtones* writes `name-ringtone.wav` files to the export folder as a fallback.
+
 ## Settings
 
 Everything is under *Settings* in the app. The defaults reproduce the original sounds exactly.
 
+**There are no range limits.** Whatever you type is used as typed: any length, any gap in any number of milliseconds (not only multiples of 50), any number of notes, gaps and pitches, decimal pitches such as `-3.5` or `2.25` semitones, any level in dB (above 0 dBFS clips). The only things that are corrected are values that cannot work at all, such as a negative length or an empty list. The only guards are about memory: if the settings allow absurdly many pattern combinations, an evenly spread subset of about a quarter of a million is used, and a ringtone is cut off at about four minutes.
+
 | Setting | Meaning |
 | --- | --- |
-| Max length | Hard cap for a whole sound, 300-5000 ms. Longer patterns are left out and the renderer trims as a last resort. |
-| Note length | How much of the source each note uses, 50-1500 ms. |
-| Gaps | Up to 4 allowed gaps between note onsets, multiples of 50 ms. |
-| Fewest / most notes | 1-4 notes per sound. |
+| Max length | Hard cap for a whole sound. Longer patterns are left out and the renderer trims as a last resort. |
+| Note length | How much of the source each note uses. |
+| Gaps | The allowed gaps between note onsets, any milliseconds. |
+| Fewest / most notes | Notes per sound. |
 | Cut notes | End each note when the next one starts, so long sources do not blur together. |
-| Pitch offsets | Up to 6 semitone offsets from -24 to 24. |
+| Pitch offsets | The allowed pitch offsets in semitones, decimals work. |
 | Rhythm weight | How much a rhythm difference counts against one semitone when spreading the sounds. |
 | Variation seed | 0 is the standard set, any other number gives a different but equally spread one. |
 | Fade-out, quieter per note, peak level, sample rate | Shaping and output of the WAV files. |
 | Reverse | Play the source backwards. |
+| Contact modes | Syllable length, centre pitch, breathiness, longest name, first word only, blip length, name pattern separation. |
+| Ringtone | Prefix and suffix sound, their gaps, length and volume, repeats and the gap between them, the gap at the end, minimum ring length, filter type, frequency and resonance, ringtone level. |
 | Prefix, numbering | File names: `prefix` + name, or `01-name` in pick order. |
 
 ## Build

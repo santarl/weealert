@@ -180,8 +180,14 @@ final class Synth {
         }
         normalize(mix, (float) Math.pow(10, prm.levelDb / 20.0));
         short[] o = new short[mix.length];
-        for (int i = 0; i < o.length; i++) o[i] = (short) Math.round(mix[i] * 32767f);
+        for (int i = 0; i < o.length; i++) o[i] = s16(mix[i]);
         return o;
+    }
+
+    /** Float sample to 16 bit, clipped (a level above 0 dBFS clips instead of wrapping around). */
+    static short s16(float v) {
+        long r = Math.round(v * 32767f);
+        return (short) Math.max(-32768, Math.min(32767, r));
     }
 
     /** 16-bit mono PCM WAV. */

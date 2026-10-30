@@ -30,13 +30,13 @@ final class Blip {
     static float[] render(ArrayList<Say.Syl> syls, Contacts.C c, Params p, int seed, float[] raw, int rate) {
         if (syls.isEmpty()) return new float[0];
         Params pb = p.copy();
-        pb.noteMs = Math.max(30, p.bNote * c.blen / 100);
+        pb.noteMs = (int) Math.max(1, p.bNote * Math.max(1, c.blen) / 100);
         pb.rate = 0;
         Synth.Note note = Synth.prepare(raw, rate, pb);
         float[] src = note.data;
         if (src.length < 64) return new float[0];
         int n = syls.size();
-        double S = p.vSyll / (c.bspd / 100.0);
+        double S = p.vSyll / (Math.max(1, c.bspd) / 100.0);
         int rs = seed == 0 ? 0x9e3779b9 : seed;
         double[] off = new double[n];
         for (int j = 0; j < n; j++) {

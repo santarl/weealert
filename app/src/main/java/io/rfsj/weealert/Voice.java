@@ -127,11 +127,11 @@ final class Voice {
      * @param speedPct  speaking speed, 100 = normal
      * @param contour   0 wander, 1 rising, 2 falling, 3 bouncy
      */
-    static float[] render(ArrayList<Say.Syl> syls, int pitchSt, int fscalePct, int speedPct, int contour,
+    static float[] render(ArrayList<Say.Syl> syls, double pitchSt, double fscalePct, double speedPct, int contour,
                           Params p, int seed) {
         if (syls.isEmpty()) return new float[0];
-        double S = p.vSyll / (speedPct / 100.0);
-        double fs = fscalePct / 100.0;
+        double S = p.vSyll / (Math.max(1, speedPct) / 100.0);
+        double fs = Math.max(1, fscalePct) / 100.0;
         int rs = seed == 0 ? 0x9e3779b9 : seed;
         int ns = syls.size();
 

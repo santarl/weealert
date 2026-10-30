@@ -12,17 +12,24 @@ import android.provider.MediaStore;
 import java.io.IOException;
 import java.io.OutputStream;
 
-/** Puts a sound into the system Notifications tone library (Android 10+). Needs no permission. */
+/** Puts a sound into the system Notifications, Ringtones or Alarms tone library (Android 10+). Needs no permission. */
 final class Tones {
-    /** Adds or overwrites one sound and returns its MediaStore uri. */
+    static final int NOTIFICATION = 0, RINGTONE = 1, ALARM = 2;
+
     static Uri add(Context c, String file, short[] pcm, int rate) throws IOException {
+        return add(c, file, pcm, rate, NOTIFICATION);
+    }
+
+    /** Adds or overwrites one sound and returns its MediaStore uri. */
+    static Uri add(Context c, String file, short[] pcm, int rate, int kind) throws IOException {
+        String dir = kind == RINGTONE ? "Ringtones/" : kind == ALARM ? "Alarms/" : "Notifications/";
         if (Build.VERSION.SDK_INT < 29) throw new IOException("needs Android 10 or newer");
         ContentResolver cr = c.getContentResolver();
         Uri coll = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
         Uri u = null;
         try (Cursor q = cr.query(coll, new String[]{MediaStore.Audio.Media._ID},
                 MediaStore.Audio.Media.DISPLAY_NAME + "=? AND " + MediaStore.Audio.Media.RELATIVE_PATH + "=?",
-                new String[]{file, "Notifications/"}, null)) {
+                new String[]{file, dir}, null)) {
             if (q != null && q.moveToFirst()) u = ContentUris.withAppendedId(coll, q.getLong(0));
         }
         boolean fresh = u == null;
@@ -31,8 +38,9 @@ final class Tones {
             v.put(MediaStore.Audio.Media.DISPLAY_NAME, file);
             v.put(MediaStore.Audio.Media.TITLE, file.substring(0, file.length() - 4));
             v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/x-wav");
-            v.put(MediaStore.Audio.Media.RELATIVE_PATH, "Notifications/");
-            v.put(MediaStore.Audio.Media.IS_NOTIFICATION, 1);
+            v.put(MediaStore.Audio.Media.RELATIVE_PATH, dir);
+            v.put(kind == RINGTONE ? MediaStore.Audio.Media.IS_RINGTONE : kind == ALARM ? MediaStore.Audio.Media.IS_ALARM
+                    : MediaStore.Audio.Media.IS_NOTIFICATION, 1);
             v.put(MediaStore.Audio.Media.IS_PENDING, 1);
             u = cr.insert(coll, v);
         }

@@ -13,7 +13,7 @@ import java.nio.ByteOrder;
 
 /** Decodes the first few seconds of any audio file Android can play into mono float PCM. */
 final class Decode {
-    static final int MAX_SEC = 3;
+    static final int MAX_SEC = 30;
 
     static final class Pcm {
         float[] data;

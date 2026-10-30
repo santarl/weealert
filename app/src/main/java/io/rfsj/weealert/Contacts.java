@@ -13,35 +13,46 @@ import java.util.List;
 final class Contacts {
     static final class C {
         String name = "", say = "";
-        int pitch = 0, fsc = 100, spd = 100, con = 0, roll = 0;     // contact voices
-        int bsrc = -2, bpit = 0, bspd = 100, bcon = 0, broll = 0;   // blips; bsrc -1 = assigned (older builds stored a source id here), anything else = assign again
-        int blen = 100;                                             // blip length in percent
+        double pitch = 0, fsc = 100, spd = 100;                     // contact voices: semitones, percent, percent
+        int con = 0, roll = 0;                                      // pitch contour style, re-roll counter
+        int bsrc = -2, bcon = 0, broll = 0;                         // blips; bsrc -1 = assigned (older builds stored a source id here), anything else = assign again
+        double bpit = 0, bspd = 100, blen = 100;                    // blips: semitones, percent, percent
         String pat = "";                                            // name patterns "gaps|semis"; "" = not assigned yet
         int proll = 0;
+        String ov = "";                                             // this sound's own tuning, "key=value;key=value"
+
+        C copy() {
+            C c = new C();
+            c.name = name; c.say = say; c.pitch = pitch; c.fsc = fsc; c.spd = spd; c.con = con; c.roll = roll;
+            c.bsrc = bsrc; c.bcon = bcon; c.broll = broll; c.bpit = bpit; c.bspd = bspd; c.blen = blen;
+            c.pat = pat; c.proll = proll; c.ov = ov;
+            return c;
+        }
 
         String text() { return say.isEmpty() ? name : say; }
 
-        private static String sign(int v) { return (v > 0 ? "+" : "") + v; }
+        private static String sign(double v) { return (v > 0 ? "+" : "") + Params.fmt(v); }
 
         private String tail() { return say.isEmpty() ? "" : "   say: " + say; }
 
         String describe() {
-            return "voice: pitch " + sign(pitch) + ", size " + fsc + "%, speed " + spd + "%, " + CONTOUR[con & 3] + tail();
+            return "voice: pitch " + sign(pitch) + ", size " + Params.fmt(fsc) + "%, speed " + Params.fmt(spd) + "%, " + CONTOUR[con & 3] + tail();
         }
 
         String describeBlip() {
-            return "blips: pitch " + sign(bpit) + ", speed " + bspd + "%, length " + blen + "%, " + CONTOUR[bcon & 3] + tail();
+            return "blips: pitch " + sign(bpit) + ", speed " + Params.fmt(bspd) + "%, length " + Params.fmt(blen) + "%, " + CONTOUR[bcon & 3] + tail();
         }
 
         Codebook.Pattern pattern() {
             int bar = pat.indexOf('|');
             if (bar < 0) return null;
-            int[] g = Params.parseList(pat.substring(0, bar)), s = Params.parseList(pat.substring(bar + 1));
+            int[] g = Params.parseList(pat.substring(0, bar));
+            double[] s = Params.parseDoubles(pat.substring(bar + 1));
             if (s.length == 0 || g.length != s.length - 1) return null;
             return new Codebook.Pattern(g, s);
         }
 
-        void setPattern(Codebook.Pattern p) { pat = ints(p.gaps) + "|" + ints(p.semis); }
+        void setPattern(Codebook.Pattern p) { pat = ints(p.gaps) + "|" + doubles(p.semis); }
     }
 
     static final String[] CONTOUR = {"wandering", "rising", "falling", "bouncy"};
@@ -52,6 +63,12 @@ final class Contacts {
     private static String ints(int[] a) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < a.length; i++) { if (i > 0) b.append(','); b.append(a[i]); }
+        return b.toString();
+    }
+
+    private static String doubles(double[] a) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < a.length; i++) { if (i > 0) b.append(','); b.append(Params.fmt(a[i])); }
         return b.toString();
     }
 
@@ -156,9 +173,9 @@ final class Contacts {
         c.bsrc = -1; c.bpit = v.bpit; c.bspd = v.bspd; c.blen = v.blen; c.bcon = v.bcon;
     }
 
-    private static int nearest(int[] set, int v) {
-        int best = set[0];
-        for (int s : set) if (Math.abs(s - v) < Math.abs(best - v)) best = s;
+    private static double nearest(double[] set, double v) {
+        double best = set[0];
+        for (double s : set) if (Math.abs(s - v) < Math.abs(best - v)) best = s;
         return best;
     }
 
@@ -169,11 +186,12 @@ final class Contacts {
     static Codebook.Pattern target(String text, Params prm) {
         java.util.ArrayList<Say.Syl> sy = Say.syllables(text, prm.vFirst, 6);
         int k = Math.max(prm.minNotes, Math.min(prm.maxNotes, sy.isEmpty() ? 2 : sy.size()));
-        int[] semis = new int[k], gaps = new int[k - 1];
+        double[] semis = new double[k];
+        int[] gaps = new int[k - 1];
         int mid = prm.gaps.length / 2;
         for (int i = 0; i < k; i++) {
             Say.Syl s = sy.isEmpty() ? null : sy.get(Math.min(i, sy.size() - 1));
-            semis[i] = nearest(prm.semis, s == null ? 0 : (int) Math.round(Blip.vowelSemi(s.nuc) * 1.5));
+            semis[i] = nearest(prm.semis, s == null ? 0 : Blip.vowelSemi(s.nuc) * 1.5);
             if (i < k - 1) {
                 int g = mid;
                 if (s != null) {
@@ -204,7 +222,7 @@ final class Contacts {
         for (int i = 0; i < cand.size(); i++) {
             Codebook.Pattern p = cand.get(i);
             if (cur != null && Codebook.dist(p, cur, prm.rhythmW) < 6) continue;
-            int m = Integer.MAX_VALUE;
+            double m = Double.MAX_VALUE;
             for (Codebook.Pattern o : others) m = Math.min(m, Codebook.dist(p, o, prm.rhythmW));
             order.add(i);
             // free patterns rank by closeness to the name's own pattern, taken ones by how far from the others
@@ -248,17 +266,17 @@ final class Contacts {
 
     static String clean(String s) {
         String t = s == null ? "" : s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ').trim();
-        return t.length() > 40 ? t.substring(0, 40).trim() : t;
+        return t;
     }
 
     static String serialize(List<C> l) {
         StringBuilder b = new StringBuilder();
         for (C c : l)
-            b.append(clean(c.name)).append('\t').append(clean(c.say)).append('\t').append(c.pitch).append('\t')
-                    .append(c.fsc).append('\t').append(c.spd).append('\t').append(c.con).append('\t').append(c.roll)
-                    .append('\t').append(c.bsrc).append('\t').append(c.bpit).append('\t').append(c.bspd)
+            b.append(clean(c.name)).append('\t').append(clean(c.say)).append('\t').append(Params.fmt(c.pitch)).append('\t')
+                    .append(Params.fmt(c.fsc)).append('\t').append(Params.fmt(c.spd)).append('\t').append(c.con).append('\t').append(c.roll)
+                    .append('\t').append(c.bsrc).append('\t').append(Params.fmt(c.bpit)).append('\t').append(Params.fmt(c.bspd))
                     .append('\t').append(c.bcon).append('\t').append(c.broll).append('\t').append(c.pat)
-                    .append('\t').append(c.proll).append('\t').append(c.blen).append('\n');
+                    .append('\t').append(c.proll).append('\t').append(Params.fmt(c.blen)).append('\t').append(clean(c.ov)).append('\n');
         return b.toString();
     }
 
@@ -272,21 +290,22 @@ final class Contacts {
                 C c = new C();
                 c.name = f[0];
                 c.say = f[1];
-                c.pitch = Integer.parseInt(f[2]);
-                c.fsc = Math.max(50, Math.min(200, Integer.parseInt(f[3])));
-                c.spd = Math.max(50, Math.min(200, Integer.parseInt(f[4])));
+                c.pitch = Double.parseDouble(f[2]);
+                c.fsc = Math.max(1, Double.parseDouble(f[3]));
+                c.spd = Math.max(1, Double.parseDouble(f[4]));
                 c.con = Math.floorMod(Integer.parseInt(f[5]), CONTOURS);
                 c.roll = Integer.parseInt(f[6]);
                 if (f.length >= 14) {
                     c.bsrc = Integer.parseInt(f[7]);
-                    c.bpit = Integer.parseInt(f[8]);
-                    c.bspd = Math.max(50, Math.min(200, Integer.parseInt(f[9])));
+                    c.bpit = Double.parseDouble(f[8]);
+                    c.bspd = Math.max(1, Double.parseDouble(f[9]));
                     c.bcon = Math.floorMod(Integer.parseInt(f[10]), CONTOURS);
                     c.broll = Integer.parseInt(f[11]);
                     c.pat = f[12];
                     c.proll = Integer.parseInt(f[13]);
                 }
-                if (f.length >= 15) c.blen = Math.max(30, Math.min(300, Integer.parseInt(f[14])));
+                if (f.length >= 15) c.blen = Math.max(1, Double.parseDouble(f[14]));
+                if (f.length >= 16) c.ov = f[15];
                 out.add(c);
             } catch (NumberFormatException ignored) { }
         }
@@ -299,6 +318,7 @@ final class Contacts {
         ArrayList<String> used = new ArrayList<>();
         for (int i = 0; i < out.length; i++) {
             String s = l.get(i).name.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", " ").replaceAll("\\s+", " ").trim();
+            if (s.length() > 100) s = s.substring(0, 100).trim();   // file systems limit a whole name to 255 bytes
             if (s.isEmpty()) s = "contact";
             String u = s;
             int n = 2;
